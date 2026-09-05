@@ -149,10 +149,10 @@ graph TD
 | `backend/app/tools/registry.py` | P1 | **SHARED** | Central tool registry | NOT_STARTED |
 | `backend/app/agents/vision.py` | P2 | OWNER | Vision agent implementation | NOT_STARTED |
 | `backend/app/tools/ocr.py` | P2 | OWNER | 3-tier OCR cascade | NOT_STARTED |
-| `backend/app/agents/reasoning.py` | P3 | OWNER | Reasoning agent implementation | NOT_STARTED |
-| `backend/app/tools/kb.py` | P3 | OWNER | Chroma KB retrieval tool | NOT_STARTED |
-| `backend/app/security/injection.py` | P3 | OWNER | Prompt injection detection | NOT_STARTED |
-| `data/kb_corpus/` | P3 | OWNER | Corpus Markdown/PDF docs | NOT_STARTED |
+| `backend/app/agents/reasoning.py` | P3 | OWNER | Reasoning agent implementation | COMPLETED |
+| `backend/app/tools/kb.py` | P3 | OWNER | Chroma KB retrieval tool | COMPLETED |
+| `backend/app/security/injection.py` | P3 | OWNER | Prompt injection detection | COMPLETED |
+| `data/kb_corpus/` | P3 | OWNER | Corpus Markdown/PDF docs | COMPLETED |
 | `backend/app/agents/coding.py` | P4 | OWNER | Self-correcting coding agent | NOT_STARTED |
 | `backend/app/tools/sandbox.py` | P4 | OWNER | Docker execution tool | NOT_STARTED |
 | `backend/app/tools/fs.py` | P4 | OWNER | Path jail & safe FS utilities | NOT_STARTED |
@@ -202,9 +202,9 @@ graph TD
 | **Ollama Client & Registry** | P1 | **NOT_STARTED** | No file | Ollama instance | Setup loopback client |
 | **Vision Agent (vision.py)** | P2 | **NOT_STARTED** | No file | `contracts.py`, Qwen2.5-VL | Stub 3-tier cascade |
 | **OCR Cascade (ocr.py)** | P2 | **NOT_STARTED** | No file | pypdf, Tesseract/easyOCR | Bench cascade on demo assets |
-| **Reasoning Agent (reasoning.py)** | P3 | **NOT_STARTED** | No file | `contracts.py`, Ollama | Implement prompt & grounding check |
-| **Knowledge Base (kb.py)** | P3 | **NOT_STARTED** | No file | chromadb, sentence-transformers | Ingest corpus documents |
-| **Injection Defence (injection.py)**| P3 | **NOT_STARTED** | No file | Regex / Tag parser | Implement structural tagging |
+| **Reasoning Agent (reasoning.py)** | P3 | **COMPLETED** | `backend/app/agents/reasoning.py` | `contracts.py`, Ollama | Implemented prompt builder, verifier & run loop |
+| **Knowledge Base (kb.py)** | P3 | **COMPLETED** | `backend/app/tools/kb.py` | chromadb, sentence-transformers | Ingested 40 docs, 49 chunks, calibrated 14 queries |
+| **Injection Defence (injection.py)**| P3 | **COMPLETED** | `backend/app/security/injection.py` | Regex / Tag parser | Implemented OCR/chunk wrapping & tripwires |
 | **Coding Agent (coding.py)** | P4 | **NOT_STARTED** | No file | `contracts.py`, Ollama | Implement traceback retry loop |
 | **Docker Sandbox (sandbox.py)** | P4 | **NOT_STARTED** | No file | Docker engine | Implement 9-flag container run |
 | **Filesystem Jail (fs.py)** | P4 | **NOT_STARTED** | No file | pathlib | Implement `_jail()` path guard |
@@ -448,7 +448,7 @@ The frontend (P5) depends strictly on these SSE event types streamed from P1's b
 | **P1 (Shaurya)** | Initial 3-Layer Scaffolding & AI Onboarding Setup | `AI_onboarding.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md` | **COMPLETED** | 2026-09-05 22:30 | None | Scaffold created and verified |
 | **P1 (Shaurya)** | Contract Lock (H0 Milestone) | `backend/app/contracts.py`, mock fixtures | **NOT_STARTED** | UNKNOWN | Scaffold ready | Top priority: unblocks P2–P6 |
 | **P2 (Disha + Aayush)** | Benchmark OCR Cascade on demo assets | `data/demo_assets/`, `backend/app/tools/ocr.py` | **NOT_STARTED** | UNKNOWN | Assets created | T-3 milestone |
-| **P3 (Aayush + Disha)** | Ingest 15–25 documents into Chroma KB & Reasoning Agent | `data/kb_corpus/`, `backend/app/tools/kb.py`, `backend/app/agents/reasoning.py` | **IN_PROGRESS** (branch `feat/p3-reasoning-kb`) | 2026-09-05 23:41 | Corpus docs | Dedicated branch checked out |
+| **P3 (Aayush + Disha)** | Ingest 40 documents into Chroma KB, calibrate 14 queries, and implement Reasoning Agent & Injection Defence | `data/kb_corpus/`, `backend/app/tools/kb.py`, `backend/app/agents/reasoning.py`, `backend/app/security/injection.py` | **COMPLETED** | 2026-09-05 23:41 | None | All 7 roadmap items implemented and verified (225 tests passing) |
 | **P4 (Ashank + Mugdh)** | Sandbox & Preflight script setup | `docker/`, `scripts/preflight.py` | **NOT_STARTED** | UNKNOWN | Docker daemon | T-3 milestone |
 | **P5 (Mugdh + Aayush)** | Scaffold Frontend (Vite/React) | `frontend/` | **NOT_STARTED** | UNKNOWN | Node.js | P5 start |
 | **P6 (Mudit)** | Create Demo Assets & Docx Templates | `templates/`, `data/demo_assets/` | **NOT_STARTED** | UNKNOWN | LibreOffice/Word | T-3 milestone |
@@ -543,6 +543,35 @@ data: <json_string>
 ---
 
 ## 15. RECENT CHANGES
+
+### 2026-09-06 02:40 — P3 (AAYUSH + DISHA) / AI
+**Changed:**
+- Fixed reasoning model resolution bug in `backend/app/agents/reasoning.py` line 45 (`self.ctx.model_for("reasoning")` correctly resolving to `reasoning-primary` / `qwen3:8b`).
+- Reorganized corpus: flattened `data/kb_corpus/*.md` (40 documents), relocated metadata to `data/kb_corpus/_meta/` and reference scripts to `.tmp/`.
+- Implemented OCR injection tripwires in `backend/app/security/injection.py` (`screen_findings()`, `wrap_finding()`, `build_findings_block()`, `assert_no_unwrapped()`).
+- Implemented pure Verifier `verify()` in `backend/app/agents/reasoning.py` with rapidfuzz `partial_ratio` sentence matching; calibrated cutoff (49.0) yielding exactly 1 unsupported claim and 6 citations (3 unique chunks) on flagship approval note.
+- Implemented `KnowledgeBase.ingest()` in `backend/app/tools/kb.py` with `chunk_text()`, pre-indexing injection `scan()`, quarantine tagging, verbatim metadata (`chunk_id`, `source_file`, `page`, `trust_level`), and CLI entrypoint.
+- Executed retrieval calibration on all 14 labelled queries from `data/kb_corpus/_meta/test_queries.md`: 14/14 queries pass (expected doc in top-3, 0 decoys in top-3; max expected dist 0.3763). Set `retrieval.top_k: 3` and `distance_cutoff: 0.40` in `config/models.yaml` and `DISTANCE_CUTOFF = 0.40` in `backend/app/tools/kb.py`.
+- Built 3-region prompt builder (`## TASK` trusted, `## FINDINGS` untrusted, `## CONTEXT` untrusted, `## QUARANTINED` counts only, `SYSTEM_DATA_RULE` in system prompt) and assembled `ReasoningAgent.run()` with `min(self_reported, grounded_ratio)` honest confidence combiner and structured `ReasoningOutput`.
+- Full pytest test suite passes: 225 passed, 1 skipped (30 new unit tests added across 5 test suites).
+
+**Reason:**
+- Completed P3 roadmap implementation for reasoning agent, knowledge base ingestion, calibration, and prompt injection defence.
+
+**Files:**
+- `backend/app/agents/reasoning.py`
+- `backend/app/tools/kb.py`
+- `backend/app/security/injection.py`
+- `data/kb_corpus/`
+- `config/models.yaml`
+- `backend/tests/test_injection.py`
+- `backend/tests/test_reasoning_verify.py`
+- `backend/tests/test_kb.py`
+- `backend/tests/test_kb_calibration.py`
+- `backend/tests/test_reasoning_prompt_and_run.py`
+- `AI_onboarding.md`
+
+---
 
 ### 2026-09-05 23:54 — P3 (AAYUSH + DISHA) / AI
 **Changed:**
