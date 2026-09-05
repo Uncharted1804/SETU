@@ -156,6 +156,7 @@ async def run_in_sandbox(
     settings: Settings,
     timeout_s: int = 15,
     input_paths: Optional[list[str]] = None,
+    workspace_root: Optional[Path] = None,
 ) -> CodingOutput:
     """Execute `code` in the hardened container.  Never on the host.
 
@@ -166,6 +167,15 @@ async def run_in_sandbox(
       - map a container OOM kill (137) to a distinct, explained result
       - have P6 review the read-only workbook mount for sheet_op("compute")
     """
+    # P1 supplies a per-task root once task workspaces are available. Until
+    # then, retain the original settings.workspace behaviour. Resolve every
+    # path before even probing Docker: invalid input must never invoke Docker.
+    effective_root = workspace_root if workspace_root is not None else settings.workspace
+    mounts: list[tuple[Path, str]] = []
+    for rel in input_paths or []:
+        host = jail(rel, effective_root)
+        mounts.append((host, "/inputs/" + host.name))
+
     ok, detail = await image_available(settings)
     if not ok:
         return unavailable_result(code, detail)
@@ -174,11 +184,6 @@ async def run_in_sandbox(
     started = time.perf_counter()
     try:
         (tmpdir / "main.py").write_text(code, encoding="utf-8")
-
-        mounts: list[tuple[Path, str]] = []
-        for rel in input_paths or []:
-            host = jail(rel, settings.workspace)
-            mounts.append((host, "/inputs/" + host.name))
 
         container_name = new_container_name()
         cmd = build_command(
