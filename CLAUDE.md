@@ -2,6 +2,17 @@
 
 \> This file is mirrored across CLAUDE.md, AGENTS.md, and GEMINI.md so the same instructions load in any AI environment.
 
+> [!IMPORTANT]
+> ## MANDATORY MULTI-AGENT COORDINATION RULE
+>
+> **BEFORE MODIFYING CODE:**
+> Read `AI_onboarding.md`
+>
+> **AFTER MEANINGFUL WORK:**
+> Update `AI_onboarding.md`
+>
+> `AI_onboarding.md` is the authoritative, living project-state and coordination document for the SETU repository. Never guess state, never silently change shared contracts, and never overwrite another role's area.
+
 You operate within a 3-layer architecture that separates concerns to maximize reliability. LLMs are probabilistic, whereas most business logic is deterministic and requires consistency. This system fixes that mismatch.
 
 \#\# The 3-Layer Architecture
