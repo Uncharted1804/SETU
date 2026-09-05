@@ -120,4 +120,24 @@ def test_write_then_read_round_trip(env):
     ctx = ToolContext(settings=env, task_id="t_1", session_id="s_1")
     result = write_file(WriteFileArgs(path="notes/a.txt", content="hello"), ctx)
     assert result["created"] is True
+    assert ctx.resolve("notes/a.txt").read_bytes() == b"hello"
     assert read_file(ReadFileArgs(path="notes/a.txt"), ctx)["content"] == "hello"
+
+
+def test_write_file_rejects_existing_path_without_registering_an_artifact(env):
+    from app.contracts import ErrorCode, WriteFileArgs
+    from app.tools.base import ToolContext, ToolError
+    from app.tools.fs import write_file
+
+    ctx = ToolContext(settings=env, task_id="t_1", session_id="s_1")
+    target = ctx.resolve("notes/existing.txt")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    original = b"keep this original content"
+    target.write_bytes(original)
+
+    with pytest.raises(ToolError) as exc:
+        write_file(WriteFileArgs(path="notes/existing.txt", content="replacement"), ctx)
+
+    assert exc.value.code == ErrorCode.TOOL_FAILED
+    assert target.read_bytes() == original
+    assert ctx.artifacts == []

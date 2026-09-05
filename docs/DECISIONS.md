@@ -283,3 +283,93 @@ caller with `asyncio.wait_for`.
 exist inside it — and `python:3.11-slim` lacks openpyxl, which is why
 `sandbox/Dockerfile` exists at all. Enforcing the timeout host-side also means a
 hung container is killed even if its entrypoint is wedged.
+
+---
+
+### D-019 — `ModelPlanner` prompts the reasoning MODEL, not `ReasoningAgent`
+
+**Ambiguity.** `planner.py`'s docstring said a real planner works "by prompting
+the reasoning agent with the accumulated observations and the tool schemas."
+That reads two ways: call `agents.get("reasoning").run()` (P3's `ReasoningAgent`
+class), or call `llm/ollama_client.py` directly with the `planning` capability
+resolved from `config/models.yaml`.
+
+**Decision.** The latter. `ModelPlanner` owns its own prompt and calls the
+transport directly. It never touches `agents/reasoning.py`.
+
+**Why.** Three independent reasons, any one of which settles it:
+
+1. `agents/base.py` states the agent contract outright — agents "DO NOT ...
+   decide what runs next." Deciding what runs next is the planner's entire job,
+   so routing planning through an agent would break the contract that makes a
+   fourth agent cheap to add.
+2. The shapes do not fit. An agent takes an `AgentInvocation` and returns an
+   `AgentResult` carrying a confidence and an escalation reason — built to draft
+   the *content* of one step. A planner needs a `Plan`, which is a different
+   question at a different altitude.
+3. It is not currently callable anyway. `ReasoningAgent.run()` opens with
+   `self.ctx.registry.resolve("reasoning")`, and `"reasoning"` is an *agent*
+   name, not a capability — `ModelRegistry.resolve` raises
+   `ConfigError: unknown capability 'reasoning'` before reaching its
+   `NOT_IMPLEMENTED` result. (P3 owns that line; `resolve_for_agent("reasoning")`
+   or `ctx.model_for("reasoning")` is what it wants. Not changed here.)
+
+A planner built on (1) would also have made `ModelPlanner` untestable and
+unusable until P3's agent landed, coupling two owners' work for no reason.
+
+**Second ambiguity, same docstring.** It also said `propose` uses
+`registry.schemas()` for the seven tool schemas. But `service.py` calls
+`build_planner(self.settings, scenario_key, self.agents, self.models)` — the
+`registry` argument is the **`ModelRegistry`**, which has no `schemas()`. The
+tool schemas live on `ToolRegistry`, a different object that is not passed in.
+
+**Decision.** `ModelPlanner` builds its own `ToolRegistry` lazily via
+`build_registry(self.settings)` and caches it.
+
+**Why.** The alternative — widening `build_planner`'s signature and the
+`service.py` call site to pass the tool registry too — is cleaner in the long
+run, but `service.py` and `tools/registry.py` are shared files and that change
+has to be announced first (CONTRIBUTING §1). `build_registry` is a pure factory
+with lazy imports and no side effects, so constructing one inside the planner
+costs nothing and keeps the resolution in a single owner's file. Revisit if the
+planner ever needs the tool *handlers* rather than just their schemas.
+
+---
+
+### D-020 — `think=False` is hardcoded at the planner's call site, not read from the registry
+
+**Ambiguity.** `config/models.yaml` declares `thinking: false` for
+`reasoning-primary`, with the comment "on only for plan/tool choice if latency
+permits". That reads as a configured, registry-driven setting. It is not one:
+`ModelEntry` in `contracts.py` has no `thinking` field, `config.py`'s
+`from_yaml()` never parses the key, and nothing has ever sent it to Ollama. The
+declared value has been inert since the T-5 gate.
+
+**Decision.** `ModelPlanner._ask()` passes `think=False` directly to
+`chat()`. The registry is not consulted for it.
+
+**Why.** Ollama leaves thinking ON for a Qwen3 model when no `think` key is
+sent, so every planning call was generating a reasoning trace, charging it
+against `num_predict`, and discarding it — nothing reads `message.thinking`.
+Measured through `ModelPlanner.propose()` itself, model warm, `num_predict=1200`:
+
+| | median `propose()` | thinking returned |
+|---|---|---|
+| no `think` key (before) | **15.4 s** | ~4 000 chars |
+| `think=False` | **3.5 s** | 0 chars |
+
+Same plans, same step counts, `done_reason="stop"` on every call, content never
+empty. The full-suite live run fell from 64.9 s to 26.0 s. `next_step()` makes
+one such call per iteration, so the saving compounds across a task.
+
+**Why not thread it through the registry.** That is the better design, and it is
+deliberately not done here: it needs a `thinking` field on `ModelEntry`
+(`contracts.py`) and parsing in `from_yaml()` (`config.py`). Both are shared
+files under CONTRIBUTING §1 and have to be announced before they change. Bundling
+a shared-contract edit into a one-line latency fix is how a shared file changes
+without anyone noticing. Same reasoning as D-019's tool-registry half.
+
+**Consequence to accept.** Until that lands, `config/models.yaml`'s
+`thinking: false` remains decorative, and a second caller that wants thinking off
+must pass `think=False` itself. Whoever wires the field through should delete
+this hardcoding and the `P1 TODO` in `llm/ollama_client.py::chat` together.

@@ -8,6 +8,18 @@ look up the registry and do not call each other.  Shared implementation
 SERVICES are fine and expected: sheet_op("compute") uses the same sandbox runner
 that backs run_python, because that is one implementation, not a tool calling a
 tool.
+
+WORKSPACE ISOLATION.  `ToolContext.workspace` is the root of ONE TASK
+(`<workspace>/tasks/<task_id>`), not the shared workspace.  Every filesystem
+touch in every tool goes through `ctx.resolve()` -> `jail(rel, ctx.workspace)`,
+so this single property is what stops one task reading or listing another's
+files.  Two consequences worth knowing before you change anything here:
+
+  * Artifact paths recorded by `register_artifact` are relative to the TASK
+    root, so the download route must resolve against the same root.
+  * Uploads are copied into the task root by `service.create_task` and the
+    envelope's paths are rewritten before the task is stored, so an agent or
+    tool only ever sees a task-relative path.
 """
 
 from __future__ import annotations
@@ -21,7 +33,29 @@ from typing import Any, Callable, Optional
 
 from ..config import Settings
 from ..contracts import ArtifactRef, ErrorCode, StructuredError
-from ..security.paths import jail, safe_storage_name, to_rel
+from ..security.paths import PathEscape, jail, safe_storage_name, to_rel
+
+
+def task_root(workspace: Path, task_id: str) -> Path:
+    """The per-task filesystem root: `<workspace>/tasks/<task_id>`.
+
+    One definition, used by ToolContext, by the executor's eager mkdir and by
+    the artifact download route, so the three cannot drift apart.
+
+    `task_id` reaches this from a URL path parameter on the download route, so
+    it is validated as a SINGLE path component rather than merely jailed.
+    `jail()` on its own is not enough here: "tasks/../other" resolves to
+    `<workspace>/other`, which is still inside the workspace, so jail would
+    allow it - escaping tasks/ and letting a crafted id aim a task root at the
+    shared uploads/ staging area. The jail call stays as the second line of
+    defence.
+    """
+    text = str(task_id).strip()
+    if not text or "/" in text or "\\" in text or text in {".", ".."}:
+        raise PathEscape(
+            task_id, "task_id must be a single path component, got %r" % (task_id,)
+        )
+    return jail("tasks/" + text, workspace)
 
 
 class ToolError(Exception):
@@ -61,7 +95,24 @@ class ToolContext:
 
     @property
     def workspace(self) -> Path:
-        return self.settings.workspace
+        """THIS TASK's root, not the shared workspace.
+
+        Moving this one property is what isolates tasks from each other: every
+        tool path resolves through `resolve()` below, and `jail` confines each
+        one to whatever this returns.
+        """
+        return task_root(self.settings.workspace, self.task_id)
+
+    def ensure_root(self) -> Path:
+        """Create this task's root now, rather than on the first write.
+
+        The executor calls this before the first step runs so that a plan
+        opening with `list_dir(".")` gets an empty listing instead of failing on
+        a directory nothing has created yet.
+        """
+        root = self.workspace
+        root.mkdir(parents=True, exist_ok=True)
+        return root
 
     def resolve(self, rel: str) -> Path:
         """Every filesystem touch in every tool goes through here."""
