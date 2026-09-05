@@ -2,9 +2,7 @@
 Vision agent.  OWNER: P2.
 
 Job: extract text and findings from scans, photos, handwriting and engineering
-drawings.  Model: resolved from config/models.yaml capability "vision"
-(currently qwen3-vl:4b on this machine, substituted for the blueprint's
-literal qwen2.5vl:3b per docs/BENCHMARKS.md and DECISIONS.md D-002).
+drawings.  Model: resolved from config/models.yaml capability "vision".
 
 Confidence signal: TWO numbers, deliberately - the model's self-reported score
 AND how much of the page was legible.  Threshold 0.70, 3 attempts.
@@ -33,7 +31,7 @@ RETRY MUST PRESERVE OTHER FINDINGS (blueprint requirement):
 THREE-TIER CASCADE:
   Tier 1 (text_layer): PyMuPDF block extraction for digital PDFs.  Exact, ~50 ms.
   Tier 2 (tesseract):  Tesseract for clean scanned print. ~1 s/page, CPU.
-  Tier 3 (vlm):        Qwen3-VL for handwriting, drawings, tables, low-confidence
+  Tier 3 (vlm):        VLM for handwriting, drawings, tables, low-confidence
                        regions.  GPU, structured JSON output.
 
 SCOPE LIMIT (blueprint F11):
@@ -69,6 +67,17 @@ from ..contracts import (
     VisionOutput,
 )
 from ..llm.ollama_client import OllamaError
+from ..tools.base import ToolError
+from ..tools.ocr import (
+    cascade_plan,
+    crop_to_bbox,
+    has_text_layer,
+    mean_confidence,
+    preprocess,
+    rasterize,
+    tier1_text_layer,
+    tier2_tesseract,
+)
 from .base import AgentContext
 
 # Vision threshold – owned by config.py, read here for clarity.
@@ -169,6 +178,32 @@ class VisionAgent:
         # Use the first file for this invocation (P1 dispatches one step per file).
         source_rel = file_paths[0]
 
+        # For retries (attempt >= 2), prior findings are required.
+        # Check this before connecting to client so missing prior findings
+        # immediately return INVALID_ARGS without attempting client connections.
+        if inv.attempt >= 2:
+            prior_findings = self._extract_prior_findings(inv)
+            if not prior_findings:
+                duration_ms = round((time.perf_counter() - t_start) * 1000, 1)
+                error = StructuredError(
+                    code=ErrorCode.INVALID_ARGS,
+                    message="VisionAgent: attempt %d requires prior findings to retry." % inv.attempt,
+                    detail={"attempt": inv.attempt},
+                )
+                return AgentResult(
+                    agent="vision",
+                    model=entry.model,
+                    payload={},
+                    attempts=[Attempt(n=inv.attempt, confidence=0.0,
+                                      failure_reason="no prior findings for retry",
+                                      feedback_injected=inv.feedback,
+                                      duration_ms=duration_ms)],
+                    final_confidence=0.0,
+                    needs_human_review=True,
+                    escalation_reason="no prior findings for targeted retry",
+                    error=error,
+                )
+
         # -- 3. Ensure model is available (never pulls) -----------------------
         client = self.ctx.client()
         try:
@@ -212,16 +247,6 @@ class VisionAgent:
         file_paths: list[str],
         t_start: float,
     ) -> AgentResult:
-        from ..tools.ocr import (
-            cascade_plan,
-            has_text_layer,
-            mean_confidence,
-            rasterize,
-            tier1_text_layer,
-            tier2_tesseract,
-        )
-        from ..tools.base import ToolError
-
         settings = self.ctx.settings
         workspace = settings.workspace
         file_path = workspace / source_rel
@@ -428,9 +453,6 @@ class VisionAgent:
         t_start: float,
     ) -> AgentResult:
         """Targeted retry: crop the lowest-confidence finding and re-run VLM only."""
-        from ..tools.ocr import crop_to_bbox, mean_confidence, preprocess, rasterize
-        from ..tools.base import ToolError
-
         settings = self.ctx.settings
         workspace = settings.workspace
         file_path = workspace / source_rel
@@ -767,7 +789,7 @@ class VisionAgent:
                             id=best_retry.id,
                             text=best_retry.text,
                             page=target_finding.page,  # preserve original page
-                            bbox=best_retry.bbox if best_retry.bbox else target_finding.bbox,
+                            bbox=target_finding.bbox,  # preserve original page-space bbox
                             confidence=best_retry.confidence,
                             source_file=target_finding.source_file,
                             extraction_tier=_VLM_TIER,

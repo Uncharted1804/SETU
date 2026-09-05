@@ -569,7 +569,7 @@ class TestVisionAgentAttempt1:
 
         assert isinstance(result, AgentResult)
         assert result.agent == "vision"
-        assert result.model == "qwen3-vl:4b"
+        assert result.model == "test-vision-model"
         assert isinstance(result.final_confidence, float)
         assert 0.0 <= result.final_confidence <= 1.0
         assert isinstance(result.attempts, list)
