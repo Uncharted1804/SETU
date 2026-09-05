@@ -118,33 +118,146 @@ def _read(args: SheetOpArgs, ctx: ToolContext) -> dict:
     return {"op": "read", "path": args.path, **out.model_dump()}
 
 
+def _generate_compute_script(spec_str: str, path_name: str) -> str:
+    import json
+    try:
+        spec = json.loads(spec_str)
+    except Exception:
+        raise ToolError(ErrorCode.INVALID_ARGS, "spec must be valid JSON")
+        
+    action = spec.get("action")
+    if action != "analyze":
+        raise ToolError(ErrorCode.INVALID_ARGS, f"Unsupported compute action: {action}")
+        
+    sheet = spec.get("sheet", "Readings")
+    col = spec.get("column", "value")
+    min_limit = spec.get("min_limit")
+    max_limit = spec.get("max_limit")
+    
+    script = f"""import pandas as pd
+import json
+import sys
+import math
+
+def main():
+    try:
+        df = pd.read_excel('/inputs/{path_name}', sheet_name={repr(sheet)})
+    except Exception as e:
+        print(json.dumps({{"error": "Failed to read excel: " + str(e)}}))
+        sys.exit(0)
+
+    if {repr(col)} not in df.columns:
+        print(json.dumps({{"error": f"Column {repr(col)} not found"}}))
+        sys.exit(0)
+        
+    numeric_series = pd.to_numeric(df[{repr(col)}], errors='coerce')
+    
+    count = float(numeric_series.count())
+    mean = float(numeric_series.mean()) if count > 0 else None
+    min_val = float(numeric_series.min()) if count > 0 else None
+    max_val = float(numeric_series.max()) if count > 0 else None
+    
+    def _clean_float(val):
+        if val is None or math.isnan(val) or math.isinf(val):
+            return None
+        return float(val)
+        
+    result = {{
+        "count": _clean_float(count),
+        "mean": _clean_float(mean),
+        "min": _clean_float(min_val),
+        "max": _clean_float(max_val),
+        "out_of_spec": []
+    }}
+    
+    intermediates = {{
+        "anomalies_found": int(numeric_series.isna().sum())
+    }}
+    
+    min_limit = {min_limit if min_limit is not None else 'None'}
+    max_limit = {max_limit if max_limit is not None else 'None'}
+    
+    mask = pd.Series(False, index=df.index)
+    if min_limit is not None:
+        mask = mask | (numeric_series < min_limit)
+    if max_limit is not None:
+        mask = mask | (numeric_series > max_limit)
+        
+    oos_df = df[mask]
+    
+    for idx, row in oos_df.iterrows():
+        row_dict = row.where(pd.notnull(row), None).to_dict()
+        row_dict['_row_index'] = int(idx) + 2
+        
+        # Clean any nested NaNs/Infs
+        cleaned_dict = {{}}
+        for k, v in row_dict.items():
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                cleaned_dict[k] = None
+            else:
+                cleaned_dict[k] = v
+                
+        result['out_of_spec'].append(cleaned_dict)
+        
+    print(json.dumps({{
+        "result": result,
+        "intermediates": intermediates
+    }}))
+
+if __name__ == '__main__':
+    main()
+"""
+    return script
+
+
 async def _compute(args: SheetOpArgs, ctx: ToolContext) -> dict:
-    """Runs generated code in the SHARED sandbox service against a read-only mount.
-
-    This is a shared implementation service, not a tool calling a tool: sheets.py
-    imports the sandbox runner directly, the same way run_python does.
-
-    P6 TODO (acceptance: the sensor demo produces a numeric result plus the
-    script and named intermediates, and the workbook mounted at /inputs is
-    provably read-only - a write attempt inside the sandbox fails):
-      - translate `spec` into a pandas/openpyxl script deterministically
-      - capture named intermediates as JSON on stdout, not by parsing prose
-    """
+    import json
+    from pathlib import Path
     from .sandbox import run_in_sandbox
 
-    raise ToolError(
-        ErrorCode.NOT_IMPLEMENTED,
-        "sheet_op(compute) script generation is owned by P6. The sandbox runner "
-        "it depends on is implemented (tools/sandbox.py::run_in_sandbox); what is "
-        "missing is the spec -> script translation.",
-        spec=args.spec,
-        runner_available=bool(run_in_sandbox),
+    if not args.spec:
+        raise ToolError(ErrorCode.INVALID_ARGS, "compute requires a spec")
+        
+    path_name = Path(args.path).name
+    script = _generate_compute_script(args.spec, path_name)
+
+    out = await run_in_sandbox(
+        code=script, 
+        settings=ctx.settings, 
+        timeout_s=15, 
+        input_paths=[args.path]
     )
+
+    if not out.sandbox_available:
+        raise ToolError(ErrorCode.SANDBOX_UNAVAILABLE, out.stderr)
+        
+    if out.exit_code != 0:
+        raise ToolError(ErrorCode.TOOL_FAILED, f"Calculation script failed (exit code {out.exit_code}): {out.stderr}")
+        
+    try:
+        parsed = json.loads(out.stdout)
+    except json.JSONDecodeError:
+        raise ToolError(ErrorCode.TOOL_FAILED, f"Failed to parse calculation output. Raw stdout:\n{out.stdout}")
+        
+    if "error" in parsed:
+        raise ToolError(ErrorCode.TOOL_FAILED, parsed["error"])
+        
+    res = ComputeResult(
+        script=script,
+        intermediates=parsed.get("intermediates", {}),
+        result=parsed.get("result", {}),
+        exit_code=out.exit_code,
+        stderr=out.stderr
+    )
+    
+    return {"op": "compute", "path": args.path, **res.model_dump()}
 
 
 def _write(args: SheetOpArgs, ctx: ToolContext) -> dict:
     """Writes a NEW workbook.  The input is never overwritten."""
     openpyxl = optional_import("openpyxl", owner="P6", purpose="spreadsheet write")
+    from openpyxl.styles import PatternFill
+    
     try:
         out = ctx.resolve(args.out_path or "")
     except PathEscape as exc:
@@ -152,14 +265,47 @@ def _write(args: SheetOpArgs, ctx: ToolContext) -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
 
     data = args.data or {}
+    formatting = args.formatting or {}
+    
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = str(data.get("sheet_name", "Results"))[:31]
-    if data.get("headers"):
-        ws.append([str(h) for h in data["headers"]])
+    
+    headers = data.get("headers")
+    if headers:
+        ws.append([str(h) for h in headers])
+        
     for row in data.get("rows") or []:
         ws.append(list(row))
-    # P6 TODO (acceptance: out-of-spec rows render red): apply args.formatting.
+        
+    if formatting:
+        color_hex = formatting.get("fill_color", "FFFF0000")
+        try:
+            fill = PatternFill(start_color=color_hex, end_color=color_hex, fill_type="solid")
+        except ValueError:
+            raise ToolError(ErrorCode.INVALID_ARGS, f"Invalid fill_color format: {color_hex}")
+            
+        status_col_name = formatting.get("status_column")
+        oos_value = str(formatting.get("oos_value", "OOS"))
+        highlight_rows = formatting.get("highlight_rows") or []
+        
+        status_col_idx = -1
+        if headers and status_col_name in headers:
+            status_col_idx = headers.index(status_col_name)
+            
+        start_row = 2 if headers else 1
+        for i, row in enumerate(data.get("rows") or []):
+            is_oos = False
+            if i in highlight_rows:
+                is_oos = True
+            elif status_col_idx != -1 and status_col_idx < len(row):
+                if str(row[status_col_idx]) == oos_value:
+                    is_oos = True
+                    
+            if is_oos:
+                for cell in ws[start_row + i]:
+                    cell.fill = fill
+                    
     wb.save(str(out))
 
     ref = ctx.register_artifact(out, media_type_for(out), simulated=ctx.mock)
