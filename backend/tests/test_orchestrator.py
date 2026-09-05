@@ -194,8 +194,13 @@ def test_a_failed_step_is_marked_failed_not_done(service, monkeypatch):
 
 
 def test_the_flagship_docx_is_a_real_openable_file(service):
+    from app.tools.base import task_root
+
     record = asyncio.run(_drive(service, "draft an approval note", "flagship"))
-    path = service.settings.workspace / record.artifacts[0].path
+    # ArtifactRef.path is recorded relative to the TASK root, not the shared
+    # workspace, so it is joined against the same root the download route
+    # resolves against.
+    path = task_root(service.settings.workspace, record.task_id) / record.artifacts[0].path
     assert path.is_file() and path.stat().st_size > 5000
 
     import docx  # python-docx

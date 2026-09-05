@@ -95,6 +95,10 @@ class Executor:
             session_id=record.envelope.session_id,
             mock=self.settings.mock_mode,
         )
+        # Create this task's root eagerly, before any step runs. A plan whose
+        # first action is list_dir(".") must see an empty directory rather than
+        # fail on one that no write has created yet.
+        ctx.ensure_root()
 
         try:
             # -- plan ---------------------------------------------------------
