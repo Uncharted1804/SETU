@@ -33,6 +33,41 @@ def _out_path(ctx: ToolContext, args: DocgenArgs):
     return target
 
 
+def _format_value(val: Any) -> str:
+    if val is None:
+        return ""
+    if isinstance(val, list):
+        lines = []
+        for item in val:
+            if isinstance(item, dict):
+                lines.append("- " + str(item.get("text", item)))
+            else:
+                lines.append("- " + str(item))
+        return "\n".join(lines)
+    return str(val)
+
+
+def _replace_in_paragraph(p, data: dict[str, Any]):
+    if not p.text or "{{" not in p.text:
+        return
+    for k, v in data.items():
+        marker = f"{{{{{k}}}}}"
+        if marker in p.text:
+            val_str = _format_value(v)
+            replaced_in_run = False
+            for run in p.runs:
+                if marker in run.text:
+                    run.text = run.text.replace(marker, val_str)
+                    replaced_in_run = True
+            
+            if not replaced_in_run and marker in p.text:
+                full_text = p.text.replace(marker, val_str)
+                if p.runs:
+                    p.runs[0].text = full_text
+                    for run in p.runs[1:]:
+                        run.text = ""
+
+
 def _docx(args: DocgenArgs, ctx: ToolContext):
     """A real approval note.  Minimal by design; P6 replaces with the template."""
     docx = optional_import("docx", owner="P6", purpose="DOCX generation")
@@ -43,64 +78,77 @@ def _docx(args: DocgenArgs, ctx: ToolContext):
         if not tpl.is_file():
             raise ToolError(ErrorCode.NOT_FOUND, "template not found: " + args.template)
         doc = docx.Document(str(tpl))
+        
+        for p in doc.paragraphs:
+            _replace_in_paragraph(p, data)
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        _replace_in_paragraph(p, data)
+        for section in doc.sections:
+            for p in section.header.paragraphs:
+                _replace_in_paragraph(p, data)
+            for p in section.footer.paragraphs:
+                _replace_in_paragraph(p, data)
     else:
         doc = docx.Document()
 
-    doc.add_heading(str(data.get("title", "Approval Note")), level=1)
+        doc.add_heading(str(data.get("title", "Approval Note")), level=1)
 
-    meta = data.get("meta") or {}
-    if meta:
-        table = doc.add_table(rows=0, cols=2)
-        table.style = "Table Grid"
-        for key, value in meta.items():
-            row = table.add_row().cells
-            row[0].text = str(key)
-            row[1].text = str(value)
-        doc.add_paragraph("")
+        meta = data.get("meta") or {}
+        if meta:
+            table = doc.add_table(rows=0, cols=2)
+            table.style = "Table Grid"
+            for key, value in meta.items():
+                row = table.add_row().cells
+                row[0].text = str(key)
+                row[1].text = str(value)
+            doc.add_paragraph("")
 
-    body = data.get("body") or data.get("content") or ""
-    for para in str(body).split("\n\n"):
-        if para.strip():
-            doc.add_paragraph(para.strip())
+        body = data.get("body") or data.get("content") or ""
+        for para in str(body).split("\n\n"):
+            if para.strip():
+                doc.add_paragraph(para.strip())
 
-    findings = data.get("findings") or []
-    if findings:
-        doc.add_heading("Findings", level=2)
-        for f in findings:
-            text = f.get("text") if isinstance(f, dict) else str(f)
-            conf = f.get("confidence") if isinstance(f, dict) else None
-            tier = f.get("extraction_tier") if isinstance(f, dict) else None
-            suffix = ""
-            if conf is not None:
-                suffix = "  [confidence %.2f%s]" % (conf, ", " + str(tier) if tier else "")
-            doc.add_paragraph(str(text) + suffix, style="List Bullet")
+        findings = data.get("findings") or []
+        if findings:
+            doc.add_heading("Findings", level=2)
+            for f in findings:
+                text = f.get("text") if isinstance(f, dict) else str(f)
+                conf = f.get("confidence") if isinstance(f, dict) else None
+                tier = f.get("extraction_tier") if isinstance(f, dict) else None
+                suffix = ""
+                if conf is not None:
+                    suffix = "  [confidence %.2f%s]" % (conf, ", " + str(tier) if tier else "")
+                doc.add_paragraph(str(text) + suffix, style="List Bullet")
 
-    citations = data.get("citations") or []
-    if citations:
-        doc.add_heading("Sources", level=2)
-        for c in citations:
-            if isinstance(c, dict):
-                doc.add_paragraph(
-                    "%s, p.%s - %s" % (c.get("source_file"), c.get("page"), c.get("snippet", "")[:160]),
-                    style="List Number",
-                )
-            else:
-                doc.add_paragraph(str(c), style="List Number")
+        citations = data.get("citations") or []
+        if citations:
+            doc.add_heading("Sources", level=2)
+            for c in citations:
+                if isinstance(c, dict):
+                    doc.add_paragraph(
+                        "%s, p.%s - %s" % (c.get("source_file"), c.get("page"), c.get("snippet", "")[:160]),
+                        style="List Number",
+                    )
+                else:
+                    doc.add_paragraph(str(c), style="List Number")
 
-    unsupported = data.get("unsupported_claims") or []
-    if unsupported:
-        doc.add_heading("Unverified claims - require human confirmation", level=2)
-        for claim in unsupported:
-            doc.add_paragraph(str(claim), style="List Bullet")
+        unsupported = data.get("unsupported_claims") or []
+        if unsupported:
+            doc.add_heading("Unverified claims - require human confirmation", level=2)
+            for claim in unsupported:
+                doc.add_paragraph(str(claim), style="List Bullet")
 
-    footer = doc.add_paragraph()
-    footer.add_run(
-        "Generated by SETU on %s. %s"
-        % (
-            datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-            "SIMULATED CONTENT - MOCK MODE." if ctx.mock else "Draft for human review.",
-        )
-    ).italic = True
+        footer = doc.add_paragraph()
+        footer.add_run(
+            "Generated by SETU on %s. %s"
+            % (
+                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                "SIMULATED CONTENT - MOCK MODE." if ctx.mock else "Draft for human review.",
+            )
+        ).italic = True
 
     target = _out_path(ctx, args)
     doc.save(str(target))
@@ -127,12 +175,32 @@ def _xlsx(args: DocgenArgs, ctx: ToolContext):
 
 
 def _pptx(args: DocgenArgs, ctx: ToolContext):
-    """NOT IMPLEMENTED - P6.  Cut-list item 3; docx + xlsx come first."""
-    raise ToolError(
-        ErrorCode.NOT_IMPLEMENTED,
-        "pptx generation is owned by P6 and not implemented yet "
-        "(cut-list item 3). docx and xlsx are available.",
-    )
+    pptx = optional_import("pptx", owner="P6", purpose="PPTX generation")
+    data: dict[str, Any] = args.data or {}
+
+    if not args.template:
+        raise ToolError(ErrorCode.INVALID_ARGS, "pptx generation requires a template")
+
+    tpl = ctx.resolve(args.template)
+    if not tpl.is_file():
+        raise ToolError(ErrorCode.NOT_FOUND, "template not found: " + args.template)
+
+    prs = pptx.Presentation(str(tpl))
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                for p in shape.text_frame.paragraphs:
+                    _replace_in_paragraph(p, data)
+            elif shape.has_table:
+                for row in shape.table.rows:
+                    for cell in row.cells:
+                        if hasattr(cell, "text_frame") and cell.text_frame:
+                            for p in cell.text_frame.paragraphs:
+                                _replace_in_paragraph(p, data)
+
+    target = _out_path(ctx, args)
+    prs.save(str(target))
+    return target
 
 
 def docgen(args: DocgenArgs, ctx: ToolContext) -> dict:
