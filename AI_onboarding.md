@@ -24,6 +24,52 @@
 > Never overwrite another owner's area without coordination.
 > Never claim completion without evidence.
 
+## SECTION 0 — AUTHORITATIVE CURRENT-STATE CORRECTION
+
+**Last reconciled:** 2026-09-06 by Codex, after inspecting the actual
+repository and restoring the P5 development environment.
+
+Sections 3–17 below are retained as an **initial historical snapshot only**.
+They incorrectly describe the repository as empty and must not be used to make
+implementation, ownership, contract, or readiness decisions. The authoritative
+current state is:
+
+- SETU is an implemented **integration scaffold**, not an empty repository.
+  Read `docs/STATUS.md`, `docs/TEAM_HANDOFF.md`, and `docs/CONTRACTS.md` before
+  claiming a component works.
+- P5 (Mugdh) owns all of `frontend/`. The React/Vite/Tailwind mock-mode UI is
+  implemented; its functional surfaces are real and its visual polish remains
+  intentionally minimal.
+- P5 Phase 0 Step 1 baseline is recorded at
+  `.tmp/ui-baseline/2026-09-06/manifest.md`. The Network proof panel polls
+  `/api/network-status` immediately on mount and every **500 ms**; this is a
+  frontend-only cadence change with no API-contract impact.
+- Host/project Python is **3.12.10** through `.venv\Scripts\python.exe`.
+  Python 3.12.10 is the single source of truth for the host backend and virtual
+  environment. The separate Docker sandbox intentionally remains
+  `setu-sandbox:py311`.
+- Node.js is **v24.15.0** and npm is **11.12.1** for the entire project.
+- ChromaDB remains the local retrieval database (`chromadb==1.5.9`); no
+  PostgreSQL source or dependency is present.
+- Verified on 2026-09-06: `pip check`, critical backend imports,
+  `scripts/check_contract_sync.py` (15 interfaces and 4 unions),
+  `npm run typecheck`, and `npm run build` all passed. Same-origin FastAPI and
+  all seven mock scenarios passed through the local HTTP API and SSE replay.
+  The user accepted the Phase 0 manual browser-validation checklist as passed;
+  screenshots were intentionally not captured and the browser run was not
+  independently recorded. The full offline wheel cache proof, real-mode
+  services, and hardware checks remain unverified.
+- Current worktree changes are the intentional documentation alignment for the
+  Python/Node/npm standards plus this reconciliation. Review them before commit.
+
+**Current P5 objective:** Phase 0 is user-accepted. The next safe work is
+Phase 1 UX architecture and visual-system planning; wait for explicit approval
+before implementing the UI/UX redesign.
+
+**P5 continuation document:** `context.md` is the concise roadmap and decision
+context for work after Phase 0. Read it with this file and the authoritative
+status/contracts documents before resuming P5 work.
+
 ## SECTION 1 — PROJECT IDENTITY
 
 - **Project name:** SETU
@@ -33,9 +79,9 @@
 - **Organization:** UNKNOWN — REQUIRES VERIFICATION
 - **One-sentence description:** Sovereign, multi-model AI assistant running locally on organizational hardware to securely process confidential documents and generate deliverables.
 - **Core goal:** To prove sovereignty by architecture, not by promise, via a local open-weight multi-agent system orchestrating tasks like OCR, reasoning, and coding without internet access.
-- **Current phase:** Initial Setup / NOT_STARTED
-- **Last updated timestamp:** 2026-09-05 22:57:21+05:30
-- **Last updated by:** Antigravity (AI)
+- **Current phase:** P5 Phase 0 user-accepted; Phase 1 planning next
+- **Last updated timestamp:** 2026-09-06
+- **Last updated by:** Codex
 
 ## SECTION 2 — WHAT SETU IS
 
@@ -297,17 +343,23 @@ Status:
 
 ## SECTION 16 — HANDOFF / CONTINUATION STATE
 
-CURRENT OBJECTIVE: Build the foundation (FastAPI, frontend skeleton)
-CURRENTLY WORKING ON: Project initialization
-FILES BEING TOUCHED: `.git/`
-WHAT IS WORKING: The blueprint documentation is present. Git is initialized on branch `p5-frontend-mugdh`.
-WHAT IS NOT WORKING: No source code exists despite blueprint claims.
-LAST VERIFIED COMMAND: `git checkout -b p5-frontend-mugdh`
-LAST VERIFIED RESULT: Switched to a new branch 'p5-frontend-mugdh'
-CURRENT BLOCKER: Core structural setup (FastAPI & Vite skeletons).
-NEXT ACTION: Create `backend/app/` and `frontend/`.
-DO NOT CHANGE: The Blueprint files or AGENTS.md.
-IMPORTANT CONTEXT: The repo is completely empty of source code. Disregard the blueprint's claim that `main.py`, `config.py`, and 26 tests exist. They must be written from scratch.
+CURRENT OBJECTIVE: Prepare P5 Phase 1 UX architecture and visual-system planning.
+CURRENTLY WORKING ON: Phase 0 was user-accepted without screenshots; no UI/UX redesign implementation has begun.
+FILES BEING TOUCHED: Documentation only — `AI_onboarding.md`, `SETUP_GUIDE.md`,
+`SETU_MASTER_BLUEPRINT_v2.md`, `docs/DECISIONS.md`, and
+`docs/FROZEN_VERSIONS.txt`.
+WHAT IS WORKING: The populated integration scaffold, Python 3.12.10 virtual
+environment, locked backend dependencies, and a successfully built frontend.
+WHAT IS NOT YET VERIFIED: Independently captured browser screenshots/direct visual rendering, offline wheel cache, real-mode services, and hardware gates.
+LAST VERIFIED COMMAND: `cd frontend && npm run build`
+LAST VERIFIED RESULT: Passed; generated `frontend/dist`.
+CURRENT BLOCKER: None for Phase 1 planning. UI/UX implementation still requires explicit user approval.
+NEXT ACTION: Produce and approve the Phase 1 UX architecture/design brief, then
+wait for explicit approval before starting UI/UX implementation.
+DO NOT CHANGE: Shared backend contracts or another owner's files without
+coordination. Do not change the host Python 3.12.10, Node.js v24.15.0, npm 11.12.1, or
+ChromaDB decisions without explicit user approval.
+IMPORTANT CONTEXT: The old empty-repository claim is superseded by Section 0.
 
 ## SECTION 17 — NEXT SAFE ACTIONS
 

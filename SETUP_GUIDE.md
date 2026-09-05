@@ -55,14 +55,29 @@ wsl --status
 
 Set Docker Desktop to **not** start automatically at login only if you're comfortable starting it manually — otherwise leave autostart on, because a missing Docker daemon kills the coding demo (blueprint risk row: "Docker Desktop unavailable").
 
-### 1.3 Python 3.11 and Node
+### 1.3 Python 3.12.10 and Node
 
 ```powershell
-python --version   # want 3.11.x
-node --version     # want 20.x LTS
+# Verify the project runtime after creating .venv in §7:
+.\.venv\Scripts\python.exe --version   # want Python 3.12.10
+node --version     # want v24.15.0
+npm --version      # want 11.12.1
 ```
 
-Use Python 3.11 specifically, matching the sandbox image, so wheels in your cache are compatible with what you tested.
+Use Python 3.12.10 for the host backend and virtual environment. It is the
+project source of truth and matches the interpreter used to generate
+`backend/requirements-lock.txt`.
+
+Use `.venv\Scripts\python.exe` for all project Python commands. Do not rely on
+an unqualified system `python` command, because a workstation may expose other
+installed Python versions.
+
+Use Node v24.15.0 and npm 11.12.1 for all frontend installation, development,
+build, and verification commands in this project.
+
+The execution sandbox deliberately remains `setu-sandbox:py311` (Python 3.11).
+It is the sole runtime exception: a separate, pre-built Docker artifact with
+its own pinned dependencies. Do not change the host interpreter to match it.
 
 ### 1.4 Tesseract OCR
 
