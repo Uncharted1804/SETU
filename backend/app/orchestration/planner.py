@@ -328,17 +328,25 @@ class ModelPlanner:
                 {"role": "system", "content": self._system_prompt()},
                 {"role": "user", "content": user},
             ],
-            # The full budget on purpose. The planning model is a thinking model
-            # and its reasoning trace is charged against num_predict; measured
-            # here, a tight budget returns done_reason="length" with EMPTY
-            # content. Squeezing this is how the planner starts silently
-            # producing nothing.
+            # The full budget on purpose. With `think=False` below the answer
+            # is short (~500 chars), but a tight num_predict on this model
+            # returns done_reason="length" with EMPTY content rather than a
+            # truncated plan, so there is no reason to economise here.
             options={
                 "temperature": entry.temperature,
                 "num_predict": entry.max_output_tokens,
             },
             keep_alive=entry.keep_alive,
             format_schema=schema,
+            # Planning is a structured-output call, not a chain-of-thought one.
+            # The planning model is a Qwen3 thinking model and Ollama leaves
+            # thinking ON when no `think` key is sent, so the reasoning trace
+            # was being generated, charged against the budget above, and then
+            # thrown away - nothing reads `message.thinking`. Measured through
+            # this code path: 15.4s median with it on, 3.4s with it off, same
+            # plans. See D-020 for why this is hardcoded here rather than read
+            # from config/models.yaml's `thinking: false`.
+            think=False,
         )
 
         message = response.get("message") or {}

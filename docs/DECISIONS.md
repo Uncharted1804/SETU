@@ -333,3 +333,43 @@ has to be announced first (CONTRIBUTING §1). `build_registry` is a pure factory
 with lazy imports and no side effects, so constructing one inside the planner
 costs nothing and keeps the resolution in a single owner's file. Revisit if the
 planner ever needs the tool *handlers* rather than just their schemas.
+
+---
+
+### D-020 — `think=False` is hardcoded at the planner's call site, not read from the registry
+
+**Ambiguity.** `config/models.yaml` declares `thinking: false` for
+`reasoning-primary`, with the comment "on only for plan/tool choice if latency
+permits". That reads as a configured, registry-driven setting. It is not one:
+`ModelEntry` in `contracts.py` has no `thinking` field, `config.py`'s
+`from_yaml()` never parses the key, and nothing has ever sent it to Ollama. The
+declared value has been inert since the T-5 gate.
+
+**Decision.** `ModelPlanner._ask()` passes `think=False` directly to
+`chat()`. The registry is not consulted for it.
+
+**Why.** Ollama leaves thinking ON for a Qwen3 model when no `think` key is
+sent, so every planning call was generating a reasoning trace, charging it
+against `num_predict`, and discarding it — nothing reads `message.thinking`.
+Measured through `ModelPlanner.propose()` itself, model warm, `num_predict=1200`:
+
+| | median `propose()` | thinking returned |
+|---|---|---|
+| no `think` key (before) | **15.4 s** | ~4 000 chars |
+| `think=False` | **3.5 s** | 0 chars |
+
+Same plans, same step counts, `done_reason="stop"` on every call, content never
+empty. The full-suite live run fell from 64.9 s to 26.0 s. `next_step()` makes
+one such call per iteration, so the saving compounds across a task.
+
+**Why not thread it through the registry.** That is the better design, and it is
+deliberately not done here: it needs a `thinking` field on `ModelEntry`
+(`contracts.py`) and parsing in `from_yaml()` (`config.py`). Both are shared
+files under CONTRIBUTING §1 and have to be announced before they change. Bundling
+a shared-contract edit into a one-line latency fix is how a shared file changes
+without anyone noticing. Same reasoning as D-019's tool-registry half.
+
+**Consequence to accept.** Until that lands, `config/models.yaml`'s
+`thinking: false` remains decorative, and a second caller that wants thinking off
+must pass `think=False` itself. Whoever wires the field through should delete
+this hardcoding and the `P1 TODO` in `llm/ollama_client.py::chat` together.
