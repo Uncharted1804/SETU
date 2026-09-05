@@ -31,6 +31,7 @@ import asyncio
 import shutil
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -39,8 +40,23 @@ from ..contracts import CodingOutput, ErrorCode
 from ..security.paths import jail
 
 
+_CLEANUP_TIMEOUT_S = 5
+_PROCESS_STOP_TIMEOUT_S = 1
+_RUN_TIMEOUT_GRACE_S = 5
+
+
+def new_container_name() -> str:
+    """Return a Docker-safe name unique to this server-side sandbox invocation."""
+    return "setu-sbx-" + uuid.uuid4().hex
+
+
 def build_command(
-    settings: Settings, code_dir: Path, timeout_s: int, extra_mounts: Optional[list[tuple[Path, str]]] = None
+    settings: Settings,
+    code_dir: Path,
+    timeout_s: int,
+    extra_mounts: Optional[list[tuple[Path, str]]] = None,
+    *,
+    container_name: Optional[str] = None,
 ) -> list[str]:
     """The nine controls, in one place, so the UI can print them verbatim.
 
@@ -59,6 +75,8 @@ def build_command(
         "--user", "65534:65534",                # 9. runs as nobody
         "-v", str(code_dir) + ":/work:ro", "-w", "/work",
     ]
+    if container_name:
+        cmd += ["--name", container_name]
     for host_path, mount_at in extra_mounts or []:
         cmd += ["-v", str(host_path) + ":" + mount_at + ":ro"]
     # The image's ENTRYPOINT is ["python", "-B"], so the argument below is the
@@ -67,6 +85,35 @@ def build_command(
     # binary, because the hardened image ships no coreutils.
     cmd += [settings.sandbox_image, "main.py"]
     return cmd
+
+
+async def remove_container(container_name: str) -> None:
+    """Best-effort, bounded cleanup of one known sandbox container.
+
+    Docker reports an already-removed name as a non-zero exit.  That is still
+    the desired state, so cleanup deliberately treats every Docker exit status
+    as idempotent success.  It never enumerates or touches other containers.
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "rm", "-f", container_name,
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+        )
+    except OSError:
+        # The primary timeout outcome must remain structured even if Docker
+        # becomes unavailable while performing best-effort cleanup.
+        return
+    try:
+        await asyncio.wait_for(proc.communicate(), timeout=_CLEANUP_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=1)
+        except asyncio.TimeoutError:
+            pass
 
 
 def docker_available() -> tuple[bool, str]:
@@ -127,21 +174,34 @@ async def run_in_sandbox(
     started = time.perf_counter()
     try:
         (tmpdir / "main.py").write_text(code, encoding="utf-8")
+
         mounts: list[tuple[Path, str]] = []
         for rel in input_paths or []:
             host = jail(rel, settings.workspace)
             mounts.append((host, "/inputs/" + host.name))
 
-        cmd = build_command(settings, tmpdir, timeout_s, mounts)
+        container_name = new_container_name()
+        cmd = build_command(
+            settings, tmpdir, timeout_s, mounts, container_name=container_name
+        )
         proc = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         try:
-            out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout_s + 5)
+            out, err = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout_s + _RUN_TIMEOUT_GRACE_S
+            )
             rc = proc.returncode or 0
         except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=_PROCESS_STOP_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                pass
+            await remove_container(container_name)
             return CodingOutput(
                 code=code,
                 stdout="",
