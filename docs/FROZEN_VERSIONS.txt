@@ -1,0 +1,6 @@
+﻿=== captured 2026-09-05 05:54 ===
+ollama --version -> ollama version is 0.33.3
+docker --version -> Docker version 29.7.2, build a7dcaa6
+python --version -> Python 3.10.0
+node --version -> v24.15.0
+tesseract --version -> tesseract v5.5.3.20260724

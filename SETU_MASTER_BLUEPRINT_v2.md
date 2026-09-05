@@ -202,6 +202,16 @@ def route_task(task: dict) -> RouterDecision:
 
 The orchestrator calls `route_task()` **first**, logs the decision, and only then makes any model call. That log line is what appears on screen during the demo. It is the difference between *claiming* auto-selection and *proving* it.
 
+> **Note to whoever writes `router.py` first (not yet built as of 2026-09-05):**
+> the literal model-tag strings in the pseudocode above (`"qwen2.5vl:3b"`,
+> `"qwen2.5:7b-instruct-q4_K_M"`) do not exist on this machine and must not be
+> copied verbatim. Per section 4.3, this box benched and froze the Qwen3
+> family instead (`qwen3:8b`, `qwen2.5-coder:7b`, `qwen3-vl:4b` — see
+> `config/models.yaml` and `docs/BENCHMARKS.md`). `route_task()` must resolve
+> model tags by reading `config/models.yaml`'s capability entries at runtime,
+> never by hardcoding a tag string, so this exact mismatch can't recur when
+> the registry changes.
+
 ### Tier 2 — model-based fallback (deliberately skipped)
 
 For genuinely ambiguous free text you could fire one cheap call to a small model to emit a single label. **Skip it.** It adds a failure mode — the classifier itself can misroute — plus latency, for a problem the rule tree already handles across your demo scenarios. Say this out loud if asked; a deliberate omission with a reason reads as engineering judgement, an accidental one reads as a gap.

@@ -1,0 +1,454 @@
+{
+  "schema": "setu.model_allowlist/1",
+  "captured_at": "2026-09-05T14:48:27+00:00",
+  "captured_on": "JARVIS",
+  "hash_mode": "full",
+  "models_root": "C:\\Users\\shaur\\.ollama\\models",
+  "versions": {
+    "ollama": "ollama version is 0.33.3",
+    "docker": "Docker version 29.7.2, build a7dcaa6",
+    "python": "Python 3.12.10"
+  },
+  "models": [
+    {
+      "model": "qwen3:8b",
+      "status": "ok",
+      "layers": [
+        {
+          "media_type": "application/vnd.ollama.image.model",
+          "digest": "sha256:a3de86cd1c132c822487ededd47a324c50491393e6565cd14bafa40d0b8e686f",
+          "declared_size": 5225374496,
+          "present": true,
+          "actual_size": 5225374496,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "a3de86cd1c132c822487ededd47a324c50491393e6565cd14bafa40d0b8e686f"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.template",
+          "digest": "sha256:ae370d884f108d16e7cc8fd5259ebc5773a0afa6e078b11f4ed7e39a27e0dfc4",
+          "declared_size": 1723,
+          "present": true,
+          "actual_size": 1723,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "ae370d884f108d16e7cc8fd5259ebc5773a0afa6e078b11f4ed7e39a27e0dfc4"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.license",
+          "digest": "sha256:d18a5cc71b84bc4af394a31116bd3932b42241de70c77d2b76d69a314ec8aa12",
+          "declared_size": 11338,
+          "present": true,
+          "actual_size": 11338,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "d18a5cc71b84bc4af394a31116bd3932b42241de70c77d2b76d69a314ec8aa12"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.params",
+          "digest": "sha256:cff3f395ef3756ab63e58b0ad1b32bb6f802905cae1472e6a12034e4246fbbdb",
+          "declared_size": 120,
+          "present": true,
+          "actual_size": 120,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "cff3f395ef3756ab63e58b0ad1b32bb6f802905cae1472e6a12034e4246fbbdb"
+        },
+        {
+          "media_type": "application/vnd.docker.container.image.v1+json",
+          "digest": "sha256:05a61d37b08453e59290add468e3bb2f688e23a01e967fecb0e2fa41218cea76",
+          "declared_size": 487,
+          "present": true,
+          "actual_size": 487,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "05a61d37b08453e59290add468e3bb2f688e23a01e967fecb0e2fa41218cea76"
+        }
+      ],
+      "manifest_path": "manifests\\registry.ollama.ai\\library\\qwen3\\8b",
+      "manifest_sha256": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+      "total_bytes": 5225388164
+    },
+    {
+      "model": "qwen2.5-coder:7b",
+      "status": "ok",
+      "layers": [
+        {
+          "media_type": "application/vnd.ollama.image.model",
+          "digest": "sha256:60e05f2100071479f596b964f89f510f057ce397ea22f2833a0cfe029bfc2463",
+          "declared_size": 4683074048,
+          "present": true,
+          "actual_size": 4683074048,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "60e05f2100071479f596b964f89f510f057ce397ea22f2833a0cfe029bfc2463"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.system",
+          "digest": "sha256:66b9ea09bd5b7099cbb4fc820f31b575c0366fa439b08245566692c6784e281e",
+          "declared_size": 68,
+          "present": true,
+          "actual_size": 68,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "66b9ea09bd5b7099cbb4fc820f31b575c0366fa439b08245566692c6784e281e"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.template",
+          "digest": "sha256:1e65450c30670713aa47fe23e8b9662bdf4065e81cc8e3cbfaa98924fcc0d320",
+          "declared_size": 1615,
+          "present": true,
+          "actual_size": 1615,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "1e65450c30670713aa47fe23e8b9662bdf4065e81cc8e3cbfaa98924fcc0d320"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.license",
+          "digest": "sha256:832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+          "declared_size": 11343,
+          "present": true,
+          "actual_size": 11343,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e"
+        },
+        {
+          "media_type": "application/vnd.docker.container.image.v1+json",
+          "digest": "sha256:d9bb33f2786931fea42f50936a2424818aa2f14500638af2f01861eb2c8fb446",
+          "declared_size": 487,
+          "present": true,
+          "actual_size": 487,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "d9bb33f2786931fea42f50936a2424818aa2f14500638af2f01861eb2c8fb446"
+        }
+      ],
+      "manifest_path": "manifests\\registry.ollama.ai\\library\\qwen2.5-coder\\7b",
+      "manifest_sha256": "dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364",
+      "total_bytes": 4683087561
+    },
+    {
+      "model": "qwen3-vl:4b",
+      "status": "ok",
+      "layers": [
+        {
+          "media_type": "application/vnd.ollama.image.model",
+          "digest": "sha256:9c60bdd691c1897bbfe5ddbc67336848e18c346b7ee2ab8541b135f208e5bb38",
+          "declared_size": 3295612832,
+          "present": true,
+          "actual_size": 3295612832,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "9c60bdd691c1897bbfe5ddbc67336848e18c346b7ee2ab8541b135f208e5bb38"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.license",
+          "digest": "sha256:7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2",
+          "declared_size": 11355,
+          "present": true,
+          "actual_size": 11355,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.license",
+          "digest": "sha256:7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2",
+          "declared_size": 11355,
+          "present": true,
+          "actual_size": 11355,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.params",
+          "digest": "sha256:f6417cb1e26962991f8e875a93f3cb0f92bc9b4955e004881251ccbf934a19d2",
+          "declared_size": 42,
+          "present": true,
+          "actual_size": 42,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "f6417cb1e26962991f8e875a93f3cb0f92bc9b4955e004881251ccbf934a19d2"
+        },
+        {
+          "media_type": "application/vnd.docker.container.image.v1+json",
+          "digest": "sha256:3353ed4a819bb8696f0b26dfe2ecc23cf3ba70566112fe6a6673f83a6b62fc30",
+          "declared_size": 551,
+          "present": true,
+          "actual_size": 551,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "3353ed4a819bb8696f0b26dfe2ecc23cf3ba70566112fe6a6673f83a6b62fc30"
+        }
+      ],
+      "manifest_path": "manifests\\registry.ollama.ai\\library\\qwen3-vl\\4b",
+      "manifest_sha256": "1343d82ebee38e26a4dd6b0180b915eb91550184e67c505dea97509571c8f683",
+      "total_bytes": 3295636135
+    },
+    {
+      "model": "qwen3:4b-instruct",
+      "status": "ok",
+      "layers": [
+        {
+          "media_type": "application/vnd.ollama.image.model",
+          "digest": "sha256:85e4a5b7b8ef0e48af0e8658f5aaab9c2324c76c1641493f4d1e25fce54b18b9",
+          "declared_size": 2497280480,
+          "present": true,
+          "actual_size": 2497280480,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "85e4a5b7b8ef0e48af0e8658f5aaab9c2324c76c1641493f4d1e25fce54b18b9"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.template",
+          "digest": "sha256:eade0a07cac7712787bbce23d12f9306adb4781d873d1df6e16f7840fa37afec",
+          "declared_size": 1379,
+          "present": true,
+          "actual_size": 1379,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "eade0a07cac7712787bbce23d12f9306adb4781d873d1df6e16f7840fa37afec"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.license",
+          "digest": "sha256:d18a5cc71b84bc4af394a31116bd3932b42241de70c77d2b76d69a314ec8aa12",
+          "declared_size": 11338,
+          "present": true,
+          "actual_size": 11338,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "d18a5cc71b84bc4af394a31116bd3932b42241de70c77d2b76d69a314ec8aa12"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.params",
+          "digest": "sha256:0914c7781e001948488d937994217538375b4fd8c1466c5e7a625221abd3ea7a",
+          "declared_size": 119,
+          "present": true,
+          "actual_size": 119,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "0914c7781e001948488d937994217538375b4fd8c1466c5e7a625221abd3ea7a"
+        },
+        {
+          "media_type": "application/vnd.docker.container.image.v1+json",
+          "digest": "sha256:b72accf9724e93698c57cbd3b1af2d3341b3d05ec2089d86d273d97964853cd2",
+          "declared_size": 487,
+          "present": true,
+          "actual_size": 487,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "b72accf9724e93698c57cbd3b1af2d3341b3d05ec2089d86d273d97964853cd2"
+        }
+      ],
+      "manifest_path": "manifests\\registry.ollama.ai\\library\\qwen3\\4b-instruct",
+      "manifest_sha256": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+      "total_bytes": 2497293803
+    },
+    {
+      "model": "qwen2.5-coder:3b",
+      "status": "ok",
+      "layers": [
+        {
+          "media_type": "application/vnd.ollama.image.model",
+          "digest": "sha256:4a188102020e9c9530b687fd6400f775c45e90a0d7baafe65bd0a36963fbb7ba",
+          "declared_size": 1929903072,
+          "present": true,
+          "actual_size": 1929903072,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "4a188102020e9c9530b687fd6400f775c45e90a0d7baafe65bd0a36963fbb7ba"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.system",
+          "digest": "sha256:66b9ea09bd5b7099cbb4fc820f31b575c0366fa439b08245566692c6784e281e",
+          "declared_size": 68,
+          "present": true,
+          "actual_size": 68,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "66b9ea09bd5b7099cbb4fc820f31b575c0366fa439b08245566692c6784e281e"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.template",
+          "digest": "sha256:1e65450c30670713aa47fe23e8b9662bdf4065e81cc8e3cbfaa98924fcc0d320",
+          "declared_size": 1615,
+          "present": true,
+          "actual_size": 1615,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "1e65450c30670713aa47fe23e8b9662bdf4065e81cc8e3cbfaa98924fcc0d320"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.license",
+          "digest": "sha256:45fc3ea7579acf3021044fc8c4c5dd5969ebc3ca2a68219b5075662cc949a4f1",
+          "declared_size": 7384,
+          "present": true,
+          "actual_size": 7384,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "45fc3ea7579acf3021044fc8c4c5dd5969ebc3ca2a68219b5075662cc949a4f1"
+        },
+        {
+          "media_type": "application/vnd.docker.container.image.v1+json",
+          "digest": "sha256:bb967eff3bda079d4ee62c09c5ef0b2e71a6a75934a4c92a13c755fcfd655703",
+          "declared_size": 487,
+          "present": true,
+          "actual_size": 487,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "bb967eff3bda079d4ee62c09c5ef0b2e71a6a75934a4c92a13c755fcfd655703"
+        }
+      ],
+      "manifest_path": "manifests\\registry.ollama.ai\\library\\qwen2.5-coder\\3b",
+      "manifest_sha256": "f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225",
+      "total_bytes": 1929912626
+    },
+    {
+      "model": "qwen3-vl:2b",
+      "status": "ok",
+      "layers": [
+        {
+          "media_type": "application/vnd.ollama.image.model",
+          "digest": "sha256:ebabfa59b71a5b96e0281ec2994977e785284e0939807a99fc340dec3c6f10de",
+          "declared_size": 1889496384,
+          "present": true,
+          "actual_size": 1889496384,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "ebabfa59b71a5b96e0281ec2994977e785284e0939807a99fc340dec3c6f10de"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.license",
+          "digest": "sha256:7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2",
+          "declared_size": 11355,
+          "present": true,
+          "actual_size": 11355,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.license",
+          "digest": "sha256:7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2",
+          "declared_size": 11355,
+          "present": true,
+          "actual_size": 11355,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.params",
+          "digest": "sha256:f6417cb1e26962991f8e875a93f3cb0f92bc9b4955e004881251ccbf934a19d2",
+          "declared_size": 42,
+          "present": true,
+          "actual_size": 42,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "f6417cb1e26962991f8e875a93f3cb0f92bc9b4955e004881251ccbf934a19d2"
+        },
+        {
+          "media_type": "application/vnd.docker.container.image.v1+json",
+          "digest": "sha256:b1b0036de383cfacd2f6f0ec14c43139d08a215e673fadaf4f3601eac4bd5490",
+          "declared_size": 551,
+          "present": true,
+          "actual_size": 551,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "b1b0036de383cfacd2f6f0ec14c43139d08a215e673fadaf4f3601eac4bd5490"
+        }
+      ],
+      "manifest_path": "manifests\\registry.ollama.ai\\library\\qwen3-vl\\2b",
+      "manifest_sha256": "0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8",
+      "total_bytes": 1889519687
+    },
+    {
+      "model": "granite3.2-vision:2b",
+      "status": "ok",
+      "layers": [
+        {
+          "media_type": "application/vnd.ollama.image.model",
+          "digest": "sha256:1aefcd9a8a15091b670951963b5f8a7e6653bb1350345e9621e179685ac9bc5f",
+          "declared_size": 1545294400,
+          "present": true,
+          "actual_size": 1545294400,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "1aefcd9a8a15091b670951963b5f8a7e6653bb1350345e9621e179685ac9bc5f"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.projector",
+          "digest": "sha256:4d464be24899cf8dc1862945432e0cef4366c4181fa38b14754cc9279b727608",
+          "declared_size": 892544608,
+          "present": true,
+          "actual_size": 892544608,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "4d464be24899cf8dc1862945432e0cef4366c4181fa38b14754cc9279b727608"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.template",
+          "digest": "sha256:579046ba1157b1e0ca06822a555a158c000333b240cdbe91479328d211448fbf",
+          "declared_size": 1292,
+          "present": true,
+          "actual_size": 1292,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "579046ba1157b1e0ca06822a555a158c000333b240cdbe91479328d211448fbf"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.system",
+          "digest": "sha256:1fa69e2371b762d1882b0bd98d284f312a36c27add732016e12e52586f98a9f5",
+          "declared_size": 154,
+          "present": true,
+          "actual_size": 154,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "1fa69e2371b762d1882b0bd98d284f312a36c27add732016e12e52586f98a9f5"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.license",
+          "digest": "sha256:2e68075caee4c571d43cb9d8d636415d8fe0fe59f695370cf56bc9f872f1ff3f",
+          "declared_size": 11331,
+          "present": true,
+          "actual_size": 11331,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "2e68075caee4c571d43cb9d8d636415d8fe0fe59f695370cf56bc9f872f1ff3f"
+        },
+        {
+          "media_type": "application/vnd.ollama.image.params",
+          "digest": "sha256:e371ed40cc78751b132fe4430cfb298e63b67f81d70c74ec4e8edc8a8e29b979",
+          "declared_size": 34,
+          "present": true,
+          "actual_size": 34,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "e371ed40cc78751b132fe4430cfb298e63b67f81d70c74ec4e8edc8a8e29b979"
+        },
+        {
+          "media_type": "application/vnd.docker.container.image.v1+json",
+          "digest": "sha256:2798fc1748ec3315edab073957d4633930958dc6ac5f39cf95f5a58fb7282917",
+          "declared_size": 646,
+          "present": true,
+          "actual_size": 646,
+          "size_matches": true,
+          "hash_mode": "full",
+          "blob_sha256": "2798fc1748ec3315edab073957d4633930958dc6ac5f39cf95f5a58fb7282917"
+        }
+      ],
+      "manifest_path": "manifests\\registry.ollama.ai\\library\\granite3.2-vision\\2b",
+      "manifest_sha256": "3be41a661804ad72cd08269816c5a145f1df6479ad07e2b3a7e29dba575d2669",
+      "total_bytes": 2437852465
+    }
+  ],
+  "sandbox_image": {
+    "image": "setu-sandbox:py311",
+    "present": true,
+    "image_id": "sha256:2208e12aaf82c744145660a233451d1ac358beaba3923a526eaba2416e6d7fd1",
+    "size_bytes": 69822298
+  },
+  "note": "Captured before isolation while the machine was trusted. preflight.py re-verifies against this file. The UI must say 'matches approved local baseline', not 'verified'."
+}
