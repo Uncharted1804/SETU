@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.venv*/
 venv/
 env/
 .pytest_cache/
@@ -56,3 +57,7 @@ desktop.ini
 .tmp/
 credentials.json
 token.json
+P2_VISION_GUIDE.md
+*_crop.png
+*_pre.png
+
