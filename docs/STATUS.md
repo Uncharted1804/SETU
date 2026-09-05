@@ -1,6 +1,7 @@
 # STATUS — what is real, what is mocked, what is scaffolded, what is unverified
 
-Last updated 2026-09-05 by P1, after building the integration scaffold.
+Last updated 2026-09-06 by P1, after exercising the Ollama transport against
+a live server. Built 2026-09-05.
 
 **Read this before telling anyone — teammate or judge — that something works.**
 The categories mean:
@@ -63,7 +64,7 @@ by their owner, not as previously-frozen code. P4 owns them from here.
 | Network monitor | `app/security/netwatch.py` | **REAL** (new) | P4 | Reports monitor failure rather than emitting zeros |
 | CORS gate | `app/security/cors.py` | **REAL** (new) | P4 | Off by default, fails closed, never a wildcard |
 | Injection scan/wrap | `app/security/injection.py` | **REAL** | P3 | Tripwires + structural tagging. **Not** a complete defence |
-| Ollama transport | `app/llm/ollama_client.py` | **REAL, untested against a live server** | P1 | Loopback validated, GPU semaphore, no pulls. Never exercised against running Ollama in this scaffold |
+| Ollama transport | `app/llm/ollama_client.py` | **REAL** | P1 | Loopback validated, GPU semaphore, no pulls. `list_models`, `chat`, `chat_stream` and the error paths were exercised against running Ollama on 2026-09-06 — see `test_ollama_live.py`, gated on `SETU_MOCK_MODE=0`. Transport only: no AGENT has produced model output yet |
 | `read_file` / `write_file` / `list_dir` | `app/tools/fs.py` | **REAL** | P4 | Real in both modes — mocking a file read would hide the jail |
 | `docgen` (docx, xlsx) | `app/tools/docgen.py` | **REAL** | P6 | Produces genuine openable files; templates/polish still to come |
 | `docgen` (pptx) | `app/tools/docgen.py` | **SCAFFOLDED** | P6 | Cut-list item 3; raises NOT_IMPLEMENTED |
@@ -105,11 +106,11 @@ by their owner, not as previously-frozen code. P4 owns them from here.
 | Token streaming display | **REAL surface, no producer** | The `token` event is handled; no agent emits one yet (P1/P3) |
 | Visual polish | Minimal by design | Functional integration first |
 
-## Checks actually run (2026-09-05)
+## Checks actually run (2026-09-05, updated 2026-09-06)
 
 | Check | Result |
 |---|---|
-| `pytest backend/tests -q` | **196 passed, 1 skipped** in ~12 s |
+| `pytest backend/tests -q` | **208 passed, 8 skipped** in ~12 s (2026-09-06). This row previously read "196 passed, 1 skipped"; the scaffold baseline was actually **195 passed, 1 skipped**, as the `da5fb37` commit body records. Off-by-one corrected |
 | `npm run build` (tsc -b && vite build) | **Passed**, 163 kB JS / 11 kB CSS |
 | `python scripts/check_contract_sync.py` | **Passed** (caught and fixed one real drift on first run) |
 | `python scripts/verify_audit.py` | **Chain intact**, 38 entries |
@@ -118,7 +119,8 @@ by their owner, not as previously-frozen code. P4 owns them from here.
 | No CORS header by default | **Passed** (live `curl -I -H "Origin: ..."`) |
 | Full flagship over live HTTP → downloadable DOCX | **Passed** — 4 steps, 37 592 bytes, valid OOXML |
 | Flagship driven through the browser UI | **Passed** — banner, checklist, scope re-approval, SSE all render |
-| 1 skipped test | `test_resolved_symlink_escape_is_blocked` — symlink creation needs privileges on this Windows host. Run it in an elevated shell or on WSL to confirm |
+| Live Ollama transport, `SETU_MOCK_MODE=0` | **Passed** 2026-09-06 — 215 passed / 1 skipped. Seven installed tags listed, a real completion and a real token stream from the planning model, and Ollama's own error body surfaced on failure |
+| 8 skipped tests | 7 are the live-Ollama tests in `test_ollama_live.py`, which need `SETU_MOCK_MODE=0` and a reachable server; they are skips, not passes, in a default run. The 8th is `test_resolved_symlink_escape_is_blocked` — symlink creation needs privileges on this Windows host. Run it in an elevated shell or on WSL to confirm |
 
 ## Not run — do not report these as passing
 
@@ -127,7 +129,7 @@ by their owner, not as previously-frozen code. P4 owns them from here.
 | Windows firewall scoping is correct | Never executed on this laptop; `preflight.py` reports advisory-skip off Windows | P4 | T-3 |
 | Ollama unreachable from a second device | Needs a second physical machine; the same-host check is only a precondition | P4 | T-3 |
 | Sandbox actually executes code | `setu-sandbox:py311` was never run by this scaffold | P4 | H1–4 |
-| Real Ollama inference works | No live call was made | P1/P2/P3/P4 | H1–4 |
+| Real Ollama inference through an AGENT | The TRANSPORT is verified (2026-09-06, above), but `vision.py`, `reasoning.py` and `coding.py` are still scaffolded, so no agent has yet produced model output. Do not read the transport result as an agent result | P2/P3/P4 | H1–4 |
 | Model weights match their digests | Nothing computed a digest | P6 | H9–13 |
 | Retrieval returns sane chunks | No corpus is indexed; `data/kb_corpus/` is empty | P3 | T-3 |
 | LAN mode works end to end | Never launched with a trusted subnet on a real network | P4 | T-3 |
