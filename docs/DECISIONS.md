@@ -373,3 +373,77 @@ without anyone noticing. Same reasoning as D-019's tool-registry half.
 `thinking: false` remains decorative, and a second caller that wants thinking off
 must pass `think=False` itself. Whoever wires the field through should delete
 this hardcoding and the `P1 TODO` in `llm/ollama_client.py::chat` together.
+
+---
+
+### D-021 — Two separate SSE bugs, and why the runner-awaiting lead was a dead end
+
+**Symptom.** `test_api.py::test_sse_replays_route_and_plan_for_a_late_subscriber`
+asserting `types[-1] == "done"` and seeing `"step_done"`. Intermittent: it passes
+in isolation, and fails roughly 3% of the time in a full-file run.
+
+**There were TWO bugs behind that one symptom**, and fixing the first did not fix
+the second. Recording both because the second was found only after the first
+fix's own regression test kept passing while the full suite still failed.
+
+**Bug 1 — `_finalise()` published the terminal state before its events.**
+`record.set_state()` ran first, then `await self._audit(...)`, which yields
+inside `asyncio.to_thread`. A concurrent `GET /api/tasks/{id}` in that window saw
+a terminal state while replay history still ended at `"step_done"`. Measured 12
+of 12 at natural timing. Fixed by moving `set_state` after both terminal emits.
+
+**Bug 2 — `subscribe()` dropped events that arrived during replay.** It
+snapshotted `history()` once and yielded it one event at a time; every `yield`
+suspends the generator while the executor keeps emitting. If the task finished
+during that replay, `done` set `_closed`, and the `if self._closed: return`
+immediately after the loop abandoned everything that had arrived in the
+meantime - `done` included. Fixed by re-reading history until it yields nothing
+new, and only then checking `_closed`.
+
+The captured failure, from an instrumented run:
+
+    CLIENT received 20 events; SERVER history has 23
+    seqs in SERVER but NOT delivered: [21, 22, 23]
+    'done' in server history: True    'done' delivered to client: False
+    stream_closed: True   runner_done: True   orphan runners: []
+
+So `done` was emitted and the task completed; the stream simply ended without
+delivering it. "Emitted but not delivered" and "never emitted" are different
+bugs with different fixes, which is why that distinction was measured rather
+than assumed.
+
+**The dead end, recorded so nobody re-runs it.** `record.runner` - the
+background task from `service.py::start()` - is never awaited or cancelled at
+the end of any `test_api.py` test, while `test_orchestrator.py` does
+`await asyncio.wait_for(record.runner, timeout=5)`. That looked like the cause.
+It is not:
+
+  * The captured failure shows `orphan runners: []`.
+  * The `client` fixture is function-scoped, so each test builds a fresh app and
+    service; earlier tasks are not even in the same store or event loop.
+  * The bug reproduces deterministically on a single `TaskEventStream` with one
+    task and no HTTP at all.
+
+An autouse teardown awaiting every pending runner did give 0 failures in 40
+runs, but at a ~2.9% base rate that has a ~30% chance of happening anyway, so it
+was not evidence. It reduces CPU contention, which makes the interleaving less
+likely - it masks the bug rather than fixing it, and would have left a defect
+that a real browser hits whenever a task finishes while the UI is mid-replay.
+
+**`done` and the end-of-stream sentinel are now force-delivered.** `emit()`
+swallowed `QueueFull` for both. A dropped sentinel leaves a subscriber parked on
+`queue.get()` until the client disconnects - a hang, not a dropped frame - and a
+dropped `done` event ends the stream cleanly without ever delivering the result.
+Both are now pushed through by evicting the oldest queued event. Ordinary events
+are still dropped for a slow subscriber: history plus Last-Event-ID is the
+recovery path for those, and neither of these two can be recovered that way.
+
+**Not changed: the 200-iteration poll budget** in the SSE tests, which is
+marginal under load. With bug 2 fixed, a client that connects mid-flight is
+served correctly, so the budget no longer determines the outcome. Widening it
+would only have hidden the failure, and changing a test's tolerance in the same
+commit that claims a statistical result would have made that result meaningless.
+
+**Guarded by** `test_events_replay.py`, which forces the interleaving directly on
+`TaskEventStream` - no HTTP, no timing luck. The end-to-end SSE test is a poor
+detector: it passes ~97% of the time on the broken code.
