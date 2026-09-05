@@ -139,11 +139,11 @@ class VisionAgent:
         # -- 2. Get file path(s) from the orchestrator relay ------------------
         # P1 relays: inputs = {"why": step.why, "args": step.args, "prior": [...]}
         args = inv.inputs.get("args") or {}
-        file_paths: list[str] = args.get("file_paths") or []
+        file_paths: list[str] = args.get("file_paths") or inv.inputs.get("file_paths") or []
 
         # Also accept a single path
-        if not file_paths and args.get("file_path"):
-            file_paths = [args["file_path"]]
+        if not file_paths and (args.get("file_path") or inv.inputs.get("file_path")):
+            file_paths = [args.get("file_path") or inv.inputs.get("file_path")]
 
         # Task file_paths may also come from the task envelope via prior
         if not file_paths:
