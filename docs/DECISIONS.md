@@ -283,3 +283,53 @@ caller with `asyncio.wait_for`.
 exist inside it — and `python:3.11-slim` lacks openpyxl, which is why
 `sandbox/Dockerfile` exists at all. Enforcing the timeout host-side also means a
 hung container is killed even if its entrypoint is wedged.
+
+---
+
+### D-019 — `ModelPlanner` prompts the reasoning MODEL, not `ReasoningAgent`
+
+**Ambiguity.** `planner.py`'s docstring said a real planner works "by prompting
+the reasoning agent with the accumulated observations and the tool schemas."
+That reads two ways: call `agents.get("reasoning").run()` (P3's `ReasoningAgent`
+class), or call `llm/ollama_client.py` directly with the `planning` capability
+resolved from `config/models.yaml`.
+
+**Decision.** The latter. `ModelPlanner` owns its own prompt and calls the
+transport directly. It never touches `agents/reasoning.py`.
+
+**Why.** Three independent reasons, any one of which settles it:
+
+1. `agents/base.py` states the agent contract outright — agents "DO NOT ...
+   decide what runs next." Deciding what runs next is the planner's entire job,
+   so routing planning through an agent would break the contract that makes a
+   fourth agent cheap to add.
+2. The shapes do not fit. An agent takes an `AgentInvocation` and returns an
+   `AgentResult` carrying a confidence and an escalation reason — built to draft
+   the *content* of one step. A planner needs a `Plan`, which is a different
+   question at a different altitude.
+3. It is not currently callable anyway. `ReasoningAgent.run()` opens with
+   `self.ctx.registry.resolve("reasoning")`, and `"reasoning"` is an *agent*
+   name, not a capability — `ModelRegistry.resolve` raises
+   `ConfigError: unknown capability 'reasoning'` before reaching its
+   `NOT_IMPLEMENTED` result. (P3 owns that line; `resolve_for_agent("reasoning")`
+   or `ctx.model_for("reasoning")` is what it wants. Not changed here.)
+
+A planner built on (1) would also have made `ModelPlanner` untestable and
+unusable until P3's agent landed, coupling two owners' work for no reason.
+
+**Second ambiguity, same docstring.** It also said `propose` uses
+`registry.schemas()` for the seven tool schemas. But `service.py` calls
+`build_planner(self.settings, scenario_key, self.agents, self.models)` — the
+`registry` argument is the **`ModelRegistry`**, which has no `schemas()`. The
+tool schemas live on `ToolRegistry`, a different object that is not passed in.
+
+**Decision.** `ModelPlanner` builds its own `ToolRegistry` lazily via
+`build_registry(self.settings)` and caches it.
+
+**Why.** The alternative — widening `build_planner`'s signature and the
+`service.py` call site to pass the tool registry too — is cleaner in the long
+run, but `service.py` and `tools/registry.py` are shared files and that change
+has to be announced first (CONTRIBUTING §1). `build_registry` is a pure factory
+with lazy imports and no side effects, so constructing one inside the planner
+costs nothing and keeps the resolution in a single owner's file. Revisit if the
+planner ever needs the tool *handlers* rather than just their schemas.
