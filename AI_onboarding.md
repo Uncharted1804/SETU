@@ -451,7 +451,8 @@ The frontend (P5) depends strictly on these SSE event types streamed from P1's b
 | **P3 (Aayush + Disha)** | Ingest 40 documents into Chroma KB, calibrate 14 queries, and implement Reasoning Agent & Injection Defence | `data/kb_corpus/`, `backend/app/tools/kb.py`, `backend/app/agents/reasoning.py`, `backend/app/security/injection.py` | **COMPLETED** | 2026-09-05 23:41 | None | All 7 roadmap items implemented and verified (225 tests passing) |
 | **P4 (Ashank + Mugdh)** | Sandbox & Preflight script setup | `docker/`, `scripts/preflight.py` | **NOT_STARTED** | UNKNOWN | Docker daemon | T-3 milestone |
 | **P5 (Mugdh + Aayush)** | Scaffold Frontend (Vite/React) | `frontend/` | **NOT_STARTED** | UNKNOWN | Node.js | P5 start |
-| **P6 (Mudit)** | Create Demo Assets & Docx Templates | `templates/`, `data/demo_assets/` | **NOT_STARTED** | UNKNOWN | LibreOffice/Word | T-3 milestone |
+| **P6 (Mudit)** | Create Demo Assets & Docx Templates, sheets, docgen, integrity & demo script | `templates/`, `data/demo_assets/`, `backend/app/tools/docgen.py`, `backend/app/tools/sheets.py`, `backend/app/security/integrity.py`, `DEMO_SCRIPT.md` | **COMPLETED** | 2026-09-06 01:27 | None | All demo assets, templates, docgen/sheets/integrity tools & tests completed |
+| **P3 + P6 Integration** | Integrate P3 reasoning & KB with P6 demo deliverables, sync `04_spec_tolerance_table.md` with `sensor_readings.xlsx` `Spec_Limits` | `data/kb_corpus/04_spec_tolerance_table.md`, `data/demo_assets/sensor_readings.xlsx`, Chroma index | **COMPLETED** | 2026-09-06 03:14 | None | Clean merge on `integrate/p3-p6`, PT-101 (80-150 PSI) & FT-205 (350-500 GPM) synced, 14 calibration queries passed, 33 integrated tests passed |
 
 ---
 
