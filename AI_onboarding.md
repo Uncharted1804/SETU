@@ -35,7 +35,7 @@
 - **One-Sentence Description:** A sovereign, air-gapped autonomous multi-model agent system that orchestrates local open-weight models via Ollama to ingest multimodal enterprise documents, retrieve grounded domain knowledge, perform audited reasoning and spreadsheet computation, and generate verifiable deliverables within strict sandbox and security boundaries.
 - **Core Goal:** Complete operational and data sovereignty (0 external traffic), air-gapped reliability, multi-model collaboration without hallucinated execution, and tamper-evident cryptographic auditability.
 - **Current Phase:** Pre-H0 / Scaffolding Initialized (Base 3-layer architecture directory skeleton initialized; application codebase awaiting H0 contract lock).
-- **Last Updated Timestamp:** 2026-09-05T23:38:00+05:30
+- **Last Updated Timestamp:** 2026-09-05T23:42:00+05:30
 - **Last Updated By:** AI Coordination Agent (Antigravity/Gemini)
 
 ---
@@ -448,7 +448,7 @@ The frontend (P5) depends strictly on these SSE event types streamed from P1's b
 | **P1 (Shaurya)** | Initial 3-Layer Scaffolding & AI Onboarding Setup | `AI_onboarding.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md` | **COMPLETED** | 2026-09-05 22:30 | None | Scaffold created and verified |
 | **P1 (Shaurya)** | Contract Lock (H0 Milestone) | `backend/app/contracts.py`, mock fixtures | **NOT_STARTED** | UNKNOWN | Scaffold ready | Top priority: unblocks P2–P6 |
 | **P2 (Disha + Aayush)** | Benchmark OCR Cascade on demo assets | `data/demo_assets/`, `backend/app/tools/ocr.py` | **NOT_STARTED** | UNKNOWN | Assets created | T-3 milestone |
-| **P3 (Aayush + Disha)** | Ingest 15–25 documents into Chroma KB | `data/kb_corpus/`, `backend/app/tools/kb.py` | **NOT_STARTED** | UNKNOWN | Corpus docs | T-3 milestone |
+| **P3 (Aayush + Disha)** | Ingest 15–25 documents into Chroma KB & Reasoning Agent | `data/kb_corpus/`, `backend/app/tools/kb.py`, `backend/app/agents/reasoning.py` | **IN_PROGRESS** (branch `feat/p3-reasoning-kb`) | 2026-09-05 23:41 | Corpus docs | Dedicated branch checked out |
 | **P4 (Ashank + Mugdh)** | Sandbox & Preflight script setup | `docker/`, `scripts/preflight.py` | **NOT_STARTED** | UNKNOWN | Docker daemon | T-3 milestone |
 | **P5 (Mugdh + Aayush)** | Scaffold Frontend (Vite/React) | `frontend/` | **NOT_STARTED** | UNKNOWN | Node.js | P5 start |
 | **P6 (Mudit)** | Create Demo Assets & Docx Templates | `templates/`, `data/demo_assets/` | **NOT_STARTED** | UNKNOWN | LibreOffice/Word | T-3 milestone |
@@ -544,6 +544,19 @@ data: <json_string>
 
 ## 15. RECENT CHANGES
 
+### 2026-09-05 23:42 — P3 (AAYUSH + DISHA) / AI
+**Changed:**
+- Created and switched to branch `feat/p3-reasoning-kb`.
+- Updated Section 9 (Active Work) and Section 16 (Handoff State) to track P3 active development.
+
+**Reason:**
+- Isolating P3 Reasoning Agent, Chroma KB ingestion, and injection defence work into a dedicated feature branch.
+
+**Files:**
+- `AI_onboarding.md`
+
+---
+
 ### 2026-09-05 23:38 — AI COORDINATION AGENT
 **Changed:**
 - Updated Section 4 (Team / Role Ownership), Section 9 (Active Work), and Section 10 (Blockers) with confirmed human developer assignments:
@@ -610,9 +623,9 @@ data: <json_string>
 ## 16. HANDOFF / CONTINUATION STATE
 
 ```text
-CURRENT OBJECTIVE:      Establish H0 Contract Lock (backend/app/contracts.py & mocks)
-CURRENTLY WORKING ON:   Transitioning from scaffolding setup to backend architecture development
-FILES BEING TOUCHED:    AI_onboarding.md, AGENTS.md, CLAUDE.md, GEMINI.md
+CURRENT OBJECTIVE:      P3 Reasoning Agent & Knowledge Base Ingestion (T-3 Milestone)
+CURRENTLY WORKING ON:   feat/p3-reasoning-kb branch (Aayush + Disha)
+FILES BEING TOUCHED:    data/kb_corpus/, backend/app/tools/kb.py, backend/app/agents/reasoning.py
 WHAT IS WORKING:        3-Layer repository scaffolding, execution script verification, git tracking
 WHAT IS NOT WORKING:    Backend FastAPI application, Docker sandbox, Ollama integrations (not yet built)
 LAST VERIFIED COMMAND:  python3 execution/example_tool.py --input 'Hackathon_Test' --output '.tmp/test_output.json'
