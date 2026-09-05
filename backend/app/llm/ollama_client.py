@@ -78,6 +78,57 @@ def normalise_endpoint(host: str) -> str:
     return "http://%s:%d" % (hostname or "127.0.0.1", port)
 
 
+def _server_said(exc: httpx.HTTPError) -> str:
+    """The server's own explanation of a failure, or "".
+
+    httpx renders a status error as a generic one-liner; Ollama puts the real
+    cause in the body as {"error": ...}.  A cold-load failure arrives this way -
+    on this 8 GB / 16 GB machine reasoning-primary (currently qwen3:8b) has
+    returned 500 with "unable to
+    allocate CUDA_Host buffer" (HOST RAM, not VRAM: Ollama disables mmap on
+    Windows+CUDA).  Dropping that body turns a one-line diagnosis into an hour,
+    which is exactly the failure property 3 exists to prevent.
+    """
+    resp = getattr(exc, "response", None)
+    if resp is None:
+        return ""
+    try:
+        body = resp.json()
+    except Exception:  # not JSON, or a stream whose body was never read
+        body = None
+    if isinstance(body, dict) and body.get("error"):
+        return str(body["error"])
+    try:
+        return (resp.text or "").strip()[:500]
+    except Exception:
+        return ""
+
+
+def _with_server_detail(message: str, exc: httpx.HTTPError) -> str:
+    said = _server_said(exc)
+    return message if not said else "%s -- server said: %s" % (message, said)
+
+
+def _http_error_code(exc: httpx.HTTPError) -> str:
+    """MODEL_UNAVAILABLE for a real absence, TOOL_FAILED for a transient fault.
+
+    Load-bearing, because `as_error()` marks MODEL_UNAVAILABLE as NOT retryable.
+    Coding a transient 5xx that way makes the orchestrator abandon a call that
+    would have succeeded seconds later - which is exactly what happened here: a
+    cold load returned 500 (out of memory allocating the pinned CUDA_Host
+    buffer) and the identical request succeeded 11 s afterwards.
+
+      * 5xx      -> the server is up but this attempt failed.  Retryable.
+      * 4xx      -> the model is genuinely absent or the request is malformed.
+                    Retrying changes nothing.
+      * no response (connect/read error) -> Ollama is not answering at all.
+    """
+    resp = getattr(exc, "response", None)
+    if resp is not None and resp.status_code >= 500:
+        return ErrorCode.TOOL_FAILED
+    return ErrorCode.MODEL_UNAVAILABLE
+
+
 class OllamaClient:
     """Text, vision and structured/tool transport seams over /api/chat."""
 
@@ -108,8 +159,11 @@ class OllamaClient:
             resp.raise_for_status()
         except httpx.HTTPError as exc:
             raise OllamaError(
-                ErrorCode.MODEL_UNAVAILABLE,
-                "Ollama is not reachable at %s: %s" % (self.base_url, exc),
+                _http_error_code(exc),
+                _with_server_detail(
+                    "Ollama is not reachable at %s: %s" % (self.base_url, exc), exc
+                ),
+                server_error=_server_said(exc) or None,
             ) from exc
         return [m.get("name", "") for m in resp.json().get("models", [])]
 
@@ -134,12 +188,27 @@ class OllamaClient:
         keep_alive: str = "10m",
         format_schema: Optional[dict] = None,
         tools: Optional[list[dict]] = None,
+        think: Optional[bool] = None,
     ) -> dict:
         """One non-streaming turn.  Serialised on the GPU lock.
 
         `format_schema` is the structured-output seam (Ollama accepts a JSON
         schema in `format`); `tools` is the function-calling seam.  Agents pass
         them; this module does not build them.
+
+        `think` is the reasoning-trace seam.  None sends no `think` key at all,
+        which is wire-identical to before this parameter existed - and for a
+        thinking model that means thinking is ON by default.  Measured on this
+        machine, reasoning-primary (currently qwen3:8b) at num_predict=1200:
+        think unset put the first CONTENT
+        token 7.69 s out behind 298 discarded thinking chunks; think=False put it
+        at 0.07 s.  config/models.yaml already declares `thinking: false` for
+        reasoning-primary, but nothing reads it: `ModelEntry` has no such field.
+
+        P1 TODO (acceptance: a `thinking` field on ModelEntry, parsed in
+        config.py's from_yaml, passed here as `think=entry.thinking`, and the
+        first token visible in the UI within 2 s of step_start).  contracts.py
+        and config.py are shared files - announce before that change lands.
         """
         payload: dict[str, Any] = {
             "model": model,
@@ -152,6 +221,8 @@ class OllamaClient:
             payload["format"] = format_schema
         if tools:
             payload["tools"] = tools
+        if think is not None:
+            payload["think"] = think
 
         async with _GPU_LOCK:
             try:
@@ -165,8 +236,11 @@ class OllamaClient:
                 ) from exc
             except httpx.HTTPError as exc:
                 raise OllamaError(
-                    ErrorCode.MODEL_UNAVAILABLE,
-                    "Ollama call failed for %s: %s" % (model, exc), model=model,
+                    _http_error_code(exc),
+                    _with_server_detail(
+                        "Ollama call failed for %s: %s" % (model, exc), exc
+                    ),
+                    model=model, server_error=_server_said(exc) or None,
                 ) from exc
             return resp.json()
 
@@ -176,31 +250,70 @@ class OllamaClient:
         messages: list[dict],
         options: Optional[dict] = None,
         keep_alive: str = "10m",
+        think: Optional[bool] = None,
     ) -> AsyncIterator[str]:
         """Token stream, for the `token` SSE event.
+
+        Yields `message.content` only.  A thinking model also emits
+        `message.thinking`, which is deliberately NOT yielded: it is a reasoning
+        trace, not an answer, and rendering it as one would misrepresent the
+        model's output.  The consequence is that with thinking on the stream is
+        SILENT for the whole thinking phase - 7.69 s on reasoning-primary
+        (currently qwen3:8b) here - so pass
+        `think=False` for anything the UI is waiting on.  See `chat()` for the
+        measurements and the config wiring that is still missing.
 
         P1 TODO (acceptance: tokens appear in the UI within 2 s of step_start on
         the real reasoning agent): wire this into agents/reasoning.py drafting.
         """
         import json
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": model, "messages": messages, "stream": True,
             "keep_alive": keep_alive, "options": options or {},
         }
+        if think is not None:
+            payload["think"] = think
         async with _GPU_LOCK:
             async with self._http().stream("POST", "/api/chat", json=payload) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line.strip():
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    piece = (chunk.get("message") or {}).get("content", "")
-                    if piece:
-                        yield piece
+                if resp.status_code >= 400:
+                    # A streamed body is not read yet, so `resp.text` would raise.
+                    # Read it first: Ollama's {"error": ...} is the whole diagnosis.
+                    await resp.aread()
+                try:
+                    resp.raise_for_status()
+                except httpx.HTTPError as exc:
+                    raise OllamaError(
+                        _http_error_code(exc),
+                        _with_server_detail(
+                            "Ollama stream failed for %s: %s" % (model, exc), exc
+                        ),
+                        model=model, server_error=_server_said(exc) or None,
+                    ) from exc
+                try:
+                    async for line in resp.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        piece = (chunk.get("message") or {}).get("content", "")
+                        if piece:
+                            yield piece
+                except httpx.TimeoutException as exc:
+                    raise OllamaError(
+                        ErrorCode.TOOL_FAILED,
+                        "Ollama stream timed out after %ss on %s" % (self.timeout, model),
+                        model=model,
+                    ) from exc
+                except httpx.HTTPError as exc:
+                    # Mid-stream transport failure.  Property 3: never let a raw
+                    # httpx error escape as if it were a modelling problem.
+                    raise OllamaError(
+                        ErrorCode.MODEL_UNAVAILABLE,
+                        "Ollama stream broke for %s: %s" % (model, exc), model=model,
+                    ) from exc
 
     async def chat_vision(
         self,
