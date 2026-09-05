@@ -1,0 +1,174 @@
+# SETU model registry -- blueprint section 6.4
+#
+# Agents request a CAPABILITY (planning, coding, vision), never a model name.
+# Adding a model later means adding an entry here plus benchmark results.
+# It must not require any change to router.py or orchestrator.py -- that is
+# requirement R5, and a judge may well ask you to demonstrate it.
+#
+# expected_manifest_digest values are filled in from config/model_allowlist.json
+# after make_allowlist.py runs. Leave them empty until then; preflight will flag it.
+#
+# STATUS: FROZEN at the T-5 benchmark gate, 2026-09-05 (docs/BENCHMARKS.md).
+# reasoning-primary (qwen3:8b), coding-primary (qwen2.5-coder:7b), and
+# vision-primary (qwen3-vl:4b) all KEEP with these exact model/context_limit
+# values -- confirmed against the candidates already scaffolded below.
+# Do not change model or context_limit values again before T-3 except an
+# emergency rollback with a recorded reason (blueprint 6.5).
+# NOTE: vision-primary's KEEP rests on only 2 synthetic test images, not 5
+# varied ones like the other slots -- see the caveat in docs/BENCHMARKS.md.
+# Re-benchmark vision once the real demo scan is chosen, before T-3.
+#
+# DELIBERATE FAMILY SUBSTITUTION vs. SETU_MASTER_BLUEPRINT_v2.md section 4.3:
+# The v2 blueprint's model tables specify the Qwen2.5 family (reasoning
+# qwen2.5:7b-instruct-q4_K_M, vision qwen2.5vl:3b) plus llama3.1:8b-instruct
+# as a reasoning fallback. This machine runs Qwen3 family instead:
+#   reasoning-primary : qwen3:8b        (blueprint literal: qwen2.5:7b-instruct-q4_K_M)
+#   coding-primary    : qwen2.5-coder:7b (blueprint literal: qwen2.5-coder:7b-instruct-q4_K_M
+#                        -- these are the SAME weights; bare ":7b" already IS
+#                        instruct+Q4_K_M, confirmed by matching registry
+#                        manifest digests. Not a substitution, just a shorter tag.)
+#   vision-primary    : qwen3-vl:4b     (blueprint literal: qwen2.5vl:3b)
+# This is not an oversight. Blueprint section 4.3 explicitly permits it:
+# "Newer families (Qwen3 / Qwen3-VL) may be available and may be better at
+# these sizes... Do not adopt anything you haven't benched." Qwen3 was benched
+# on this exact machine (docs/BENCHMARKS.md, 2026-09-05) and passed the T-5
+# gate; qwen2.5vl:3b itself was never pulled or tested here, so no side-by-side
+# comparison was run -- Qwen3-VL's KEEP stands on its own benchmark result, not
+# on beating the blueprint's literal pick. If asked why the config doesn't
+# match section 4.3's table verbatim: this is the documented, benched reason.
+
+defaults:
+  provider: ollama
+  host: "127.0.0.1:11434"
+  keep_alive: "10m"
+  # Only one model is GPU-resident at a time on the 8 GB card. This is a
+  # scheduling decision, not an architectural limit (blueprint F2).
+  max_loaded_models: 1
+
+models:
+  - id: reasoning-primary
+    provider: ollama
+    model: qwen3:8b
+    capabilities: [text, planning, tools, drafting]
+    context_limit: 8192
+    max_output_tokens: 1200
+    temperature: 0.2
+    thinking: false          # on only for plan/tool choice if latency permits
+    keep_alive: 10m
+    expected_manifest_digest: "sha256:500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"
+    enabled: true
+    fallback: reasoning-small
+
+  - id: reasoning-small
+    provider: ollama
+    model: qwen3:4b-instruct
+    capabilities: [text, planning, tools, drafting]
+    context_limit: 8192
+    max_output_tokens: 1000
+    temperature: 0.2
+    thinking: false
+    keep_alive: 10m
+    expected_manifest_digest: "sha256:0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0"
+    enabled: true
+    fallback: null
+
+  - id: coding-primary
+    provider: ollama
+    model: qwen2.5-coder:7b
+    capabilities: [code, calculation, tools]
+    context_limit: 8192
+    max_output_tokens: 1200
+    temperature: 0.0
+    thinking: false
+    keep_alive: 10m
+    expected_manifest_digest: "sha256:dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364"
+    enabled: true
+    fallback: coding-small
+
+  - id: coding-small
+    provider: ollama
+    model: qwen2.5-coder:3b
+    capabilities: [code, calculation, tools]
+    context_limit: 8192
+    max_output_tokens: 1000
+    temperature: 0.0
+    thinking: false
+    keep_alive: 10m
+    expected_manifest_digest: "sha256:f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225"
+    enabled: true
+    fallback: null
+
+  - id: vision-primary
+    provider: ollama
+    model: qwen3-vl:4b
+    capabilities: [vision, document_understanding, ocr_assist]
+    context_limit: 4096
+    max_output_tokens: 700
+    temperature: 0.0
+    thinking: false
+    keep_alive: 10m
+    expected_manifest_digest: "sha256:1343d82ebee38e26a4dd6b0180b915eb91550184e67c505dea97509571c8f683"
+    enabled: true
+    fallback: vision-small
+    # Blueprint F11: extraction only. Engineering interpretation escalates.
+    scope_note: >
+      Extracts title blocks, labels, annotations, visible defects and candidate
+      symbols. Never interprets or approves an engineering drawing.
+
+  - id: vision-small
+    provider: ollama
+    model: qwen3-vl:2b
+    capabilities: [vision, document_understanding]
+    context_limit: 4096
+    max_output_tokens: 600
+    temperature: 0.0
+    thinking: false
+    keep_alive: 10m
+    expected_manifest_digest: "sha256:0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe8"
+    enabled: true
+    fallback: null
+
+  # ---------------------------------------------------------------------
+  # R5 demonstration entry. Disabled, unbenchmarked, present only to show
+  # that adding a model is a configuration change. Keep it disabled, and
+  # say so plainly if a judge asks -- an undemonstrated capability is
+  # roadmap, never "implemented" (blueprint decision 13).
+  # ---------------------------------------------------------------------
+  - id: reasoning-future-example
+    provider: ollama
+    model: llama3.1:8b
+    capabilities: [text, planning, tools, drafting]
+    context_limit: 8192
+    max_output_tokens: 1200
+    temperature: 0.2
+    keep_alive: 10m
+    expected_manifest_digest: ""
+    enabled: false
+    fallback: reasoning-primary
+    note: "Example only. Not installed, not benchmarked, disabled."
+
+# Deterministic router rules. The router is a control layer, not an agent.
+# Every decision must be explainable in the UI banner: model, reason, rule, latency.
+routing:
+  rules:
+    - id: R-VISION-01
+      when: "input has page images OR ocr_mean < 0.75 OR document_type == 'scanned'"
+      capability: vision
+      reason: "Page requires visual understanding; OCR confidence below threshold"
+
+    - id: R-CODE-01
+      when: "task mentions spreadsheet, calculation, script, or a .xlsx/.csv input"
+      capability: code
+      reason: "Task requires executable computation and verification"
+
+    - id: R-REASON-01
+      when: "default"
+      capability: planning
+      reason: "Drafting and planning task with retrieval grounding"
+
+  # Calibrate these on a labelled query set (blueprint F14). Do NOT ship a
+  # universal cosine cutoff -- similarity scales vary by embedding model.
+  retrieval:
+    top_k: null              # set from data/kb_eval results
+    distance_cutoff: null    # set from data/kb_eval results
+    calibrated_on: null      # e.g. "data/kb_eval/queries.jsonl, 2026-09-01"

@@ -1,0 +1,53 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Node / frontend ----
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+npm-debug.log*
+
+# ---- Secrets and local config ----
+.env
+.env.*
+!.env.example
+
+# ---- Model weights and vendored binaries (GB-scale, staged out of band) ----
+vendor/
+*.gguf
+*.safetensors
+*.bin
+*.tar
+models/
+
+# ---- Runtime state: uploads, generated artifacts, logs, vector store ----
+# The agent's workspace is runtime data, not source. Keep the directory in git
+# via .gitkeep so the path jail has somewhere to resolve to on a fresh clone.
+data/workspace/*
+!data/workspace/.gitkeep
+data/chroma/
+logs/
+*.jsonl
+
+# Small synthetic fixtures ARE committed - they are how a teammate reproduces a
+# demo beat without the real assets.
+!data/demo_assets/**
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
