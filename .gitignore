@@ -1,44 +1,53 @@
-# Intermediate processing files (Layer 2/3 temporary files)
-.tmp/*
-!.tmp/.gitkeep
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# Environment variables & API keys
+# ---- Node / frontend ----
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+npm-debug.log*
+
+# ---- Secrets and local config ----
 .env
-*.env.local
-
-# Credentials & OAuth tokens
+.env.*
+!.env.example
 credentials.json
 token.json
 
-# Python artifacts
-__pycache__/
-*.py[cod]
-*.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# ---- Model weights and vendored binaries (GB-scale, staged out of band) ----
+vendor/
+*.gguf
+*.safetensors
+*.bin
+*.tar
+models/
 
-# Virtual environments
-.venv/
-venv/
-ENV/
-env/
+# ---- Runtime state: uploads, generated artifacts, logs, vector store ----
+# The agent's workspace is runtime data, not source. Keep the directory in git
+# via .gitkeep so the path jail has somewhere to resolve to on a fresh clone.
+data/workspace/*
+!data/workspace/.gitkeep
+data/chroma/
+logs/
+*.jsonl
 
-# IDE & OS
+# Small synthetic fixtures ARE committed - they are how a teammate reproduces a
+# demo beat without the real assets.
+!data/demo_assets/**
+
+# ---- Editors / OS ----
 .vscode/
 .idea/
 *.swp
@@ -46,3 +55,8 @@ env/
 *~
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# ---- Credentials and Intermediates ----
+.tmp/*
+!.tmp/.gitkeep

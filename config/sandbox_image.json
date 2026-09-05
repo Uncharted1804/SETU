@@ -1,0 +1,7 @@
+﻿{
+    "tar_sha256":  "20743c308426c7e82babfe1cf150be8d685591a88e6c0f37a6fb8b0c7b87be9d",
+    "tar_path":  "C:\\Users\\shaur\\Desktop\\setu\\vendor\\setu-sandbox-py311.tar",
+    "image_id":  "sha256:2208e12aaf82c744145660a233451d1ac358beaba3923a526eaba2416e6d7fd1",
+    "captured_at":  "2026-09-05T06:55:45.3356662+05:30",
+    "image":  "setu-sandbox:py311"
+}
