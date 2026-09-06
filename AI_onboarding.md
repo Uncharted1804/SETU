@@ -389,31 +389,53 @@ Tests:
 - `npm run typecheck` — passed with 0 errors.
 - `npm run build` — passed (built in ~1.1s).
 
+- Status:
+- IMPLEMENTED and FULLY VERIFIED.
+
+### 2026-09-06 — Antigravity (AI) — Iteration 2 (Vision-to-Code Line Formatting & Chaining Fix)
+Changed:
+- Fixed OCR word-per-line formatting:
+  - Added `format_findings_text()` in `backend/app/agents/vision.py` to reconstruct natural lines and paragraphs from word-level findings (e.g. from Tesseract) based on bounding-box coordinates and vertical thresholds instead of joining every word with a newline.
+- Prevented OCR raw text corruption in `.py` deliverables:
+  - In `backend/app/orchestration/executor.py` (`_resolve_tool_placeholders()`), blocked non-code `raw_text` from being substituted into code files (`.py`, etc.).
+- Guaranteed `coding` and `write_file` execution for vision coding problems:
+  - In `backend/app/orchestration/planner.py` (`ModelPlanner.propose()`), added multimodal coding plan guarantee: when an image is attached with code/solve intent or general problem prompt, the plan automatically schedules `[vision, coding, write_file]`.
+  - In `ModelPlanner.is_satisfied()`, ensured the task is not considered satisfied if only extraction/retrieval has run without an agent/deliverable step.
+  - In `ModelPlanner.next_step()`, added dynamic coding chaining: when vision extracts text containing code signals (e.g. `linked list`, `input:`, `output:`, `def `, `constraints`), `coding` and `write_file(path="solution.py")` are dynamically scheduled.
+- Mock scenario & keywords expansion:
+  - In `backend/app/mocks/scenarios.py`, updated `select_scenario()` to match `"2. Add Two Numbers"`, `"add two"`, `"two numbers"`, `"leetcode"`, `"problem"`, `"solution"`, and empty prompt with image.
+  - Updated `_vision_code` scenario with full problem statement and verified Python solution for LeetCode 2 ("Add Two Numbers") alongside Two Sum.
+
+Tests:
+- `pytest backend/tests` — 435 passed, 14 skipped in 126.06s.
+- `backend/tests/test_vision_code.py` — 6 passed in 1.25s.
+- `scripts/check_contract_sync.py` — 15 interfaces and 4 unions in sync.
+- `npm run typecheck` — passed with 0 errors.
+- `npm run build` — passed (built in 1.11s).
+
 Status:
 - IMPLEMENTED and FULLY VERIFIED.
 
 ## SECTION 16 — HANDOFF / CONTINUATION STATE
 
-CURRENT OBJECTIVE: Multimodal image-to-code and copyable code UI deliverables verified. Validate and hand off the research-ledger chat workspace.
+CURRENT OBJECTIVE: Multimodal image-to-code pipeline, OCR line reconstruction, and copyable code UI deliverables verified. Validate and hand off the research-ledger chat workspace.
 CURRENTLY WORKING ON: The frontend has durable, server-owned session history
 and a three-rail research-ledger layout: session history, conversation, and
 proof. Chat turns render copyable ChatGPT/Gemini style code blocks with transient
 feedback and direct artifact download pills for code deliverables (`solution.py`).
-FILES BEING TOUCHED: `backend/app/agents/coding.py`, `backend/app/history.py`,
-`backend/app/mocks/scenarios.py`, `backend/app/orchestration/executor.py`,
-`backend/app/orchestration/planner.py`, `backend/app/tools/base.py`,
-`backend/tests/test_orchestrator.py`, `backend/tests/test_vision_code.py`,
-`frontend/src/App.tsx`, `frontend/src/components/workspace.tsx`,
-`frontend/src/index.css`, and `AI_onboarding.md`.
+FILES BEING TOUCHED: `backend/app/agents/vision.py`, `backend/app/mocks/scenarios.py`,
+`backend/app/orchestration/executor.py`, `backend/app/orchestration/planner.py`,
+`backend/tests/test_vision_code.py`, and `AI_onboarding.md`.
 WHAT IS WORKING:
+- Natural paragraph and line reconstruction for OCR text from image inputs (resolving the single-word-per-line artifact).
 - Multimodal image code solving (`vision` -> `coding` -> `write_file`) extracts problem text from image, plans coding solution, executes in sandbox, saves `solution.py` artifact, and returns code in chat.
+- Placeholder resolver blocks OCR text from writing to `.py` code files.
 - Code blocks in chat render with copy button (transient "Copied!" checkmark) and artifact download button.
 - Server-side SQLite durable session history and HttpOnly cookie.
-- Automatic fallback safeguard in executor to persist `solution.py` artifact if coding agent produced code.
 WHAT IS NOT YET VERIFIED: Direct browser visual rendering at desktop/mobile
 widths, offline wheel cache, real-mode services, and hardware gates.
 LAST VERIFIED COMMAND: `pytest backend\tests; python scripts\check_contract_sync.py; npm --prefix frontend run typecheck; npm --prefix frontend run build`
-LAST VERIFIED RESULT: Backend tests: 431 passed, 14 skipped; contract check: 15 interfaces and 4 unions in sync; frontend typecheck and build passed with 0 errors.
+LAST VERIFIED RESULT: Backend tests: 435 passed, 14 skipped; contract check: 15 interfaces and 4 unions in sync; frontend typecheck and build passed with 0 errors.
 CURRENT BLOCKER: None.
 NEXT ACTION: Review the chat workspace in a browser (light/dark, copy button interaction, artifact pills), then run mock scenario matrix before Phase 2 handoff.
 DO NOT CHANGE: Shared backend contracts or another owner's files without

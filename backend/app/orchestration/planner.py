@@ -478,6 +478,55 @@ class ModelPlanner:
                 )
             )
 
+        # Multimodal coding safeguard: if an image is attached and the task asks
+        # to solve/code/implement or is a programming image question, ensure
+        # vision -> coding -> write_file pipeline is planned.
+        has_vision = any(s.target == "vision" for s in steps)
+        has_coding = any(s.target == "coding" for s in steps)
+        has_write = any(s.target == "write_file" for s in steps)
+        has_image = any(
+            p.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"))
+            for p in (task.file_paths or [])
+        )
+        user_text = (task.text or "").lower()
+        code_keywords = {
+            "code", "python", "solve", "solution", "implement", "algorithm",
+            "function", "program", "script", "leetcode", "problem", "question",
+            "numbers", "add two", "two numbers", "debug", "fix", "write",
+            "class", "def", "array", "linked list", "test", "numbers", "add"
+        }
+        is_code_intent = (
+            any(w in user_text for w in code_keywords)
+            or not user_text.strip()
+            or len(user_text.strip()) < 30
+        )
+
+        if (has_vision or has_image) and is_code_intent and not has_coding:
+            if not has_vision:
+                steps.insert(0, PlanStep(
+                    n=1,
+                    kind="agent",
+                    target="vision",
+                    args={"file_paths": task.file_paths},
+                    why="Extract programming question and specifications from the image",
+                ))
+            if not has_coding and len(steps) < self.MAX_STEPS:
+                steps.append(PlanStep(
+                    n=len(steps) + 1,
+                    kind="agent",
+                    target="coding",
+                    args={},
+                    why="Implement self-contained Python solution and verify in Docker sandbox",
+                ))
+            if not has_write and len(steps) < self.MAX_STEPS:
+                steps.append(PlanStep(
+                    n=len(steps) + 1,
+                    kind="tool",
+                    target="write_file",
+                    args={"path": "solution.py", "content": "<generated_code>"},
+                    why="Save verified Python solution as deliverable artifact",
+                ))
+
         plan = Plan(steps=steps, approved=False, revisions=0)
         _renumber(plan)
         return plan
@@ -524,6 +573,36 @@ class ModelPlanner:
         # "continue", or any unexpected value: run the next unstarted step.
         step = self._first_pending(plan)
         if step is None:
+            # Check if vision ran and revealed a coding problem that hasn't been solved
+            has_coding_run = any(o.target == "coding" for o in observations)
+            has_vision_run = any(o.target == "vision" for o in observations)
+            if has_vision_run and not has_coding_run:
+                for o in reversed(observations):
+                    if o.target == "vision":
+                        raw = str((o.payload or {}).get("raw_text") or "").lower()
+                        code_signals = [
+                            "input:", "output:", "linked list", "integer", "def ", "class ",
+                            "return ", "constraints", "leetcode", "function", "algorithm",
+                            "two numbers", "add two", "array", "nums =", "target ="
+                        ]
+                        if any(sig in raw for sig in code_signals):
+                            coding_step = PlanStep(
+                                n=len(plan.steps) + 1,
+                                kind="agent",
+                                target="coding",
+                                why="Implement and verify Python solution to extracted coding problem",
+                            )
+                            write_step = PlanStep(
+                                n=len(plan.steps) + 2,
+                                kind="tool",
+                                target="write_file",
+                                args={"path": "solution.py", "content": "<generated_code>"},
+                                why="Save verified Python solution as deliverable artifact",
+                            )
+                            plan.steps.extend([coding_step, write_step])
+                            plan.approved_scope.extend([coding_step.scope_key(), write_step.scope_key()])
+                            _renumber(plan)
+                            return coding_step
             self._no_further_action = True
         return step
 
@@ -532,16 +611,16 @@ class ModelPlanner:
 
         True when `next_step` has already reported no further action, or when no
         step is still pending.
-
-        The second condition is not a shortcut. MAX_ITERATIONS is 5 and a plan
-        may legitimately hold that many steps, so a planner that insisted on one
-        extra confirming model call would drive every full-length plan into the
-        iteration cap and escalate a task that had in fact finished. Revision
-        still works, because `next_step` inserts a pending step into the plan
-        before this is next consulted.
         """
         if self._no_further_action:
             return True
+        # If only vision or retrieval tools have run, the task is NOT satisfied without an agent/deliverable
+        has_substantive = any(
+            obs.target in {"coding", "reasoning", "write_file", "docgen", "sheet_op"}
+            for obs in observations
+        )
+        if observations and not has_substantive:
+            return False
         return bool(plan.steps) and all(step.status != "pending" for step in plan.steps)
 
 

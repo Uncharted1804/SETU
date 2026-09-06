@@ -650,12 +650,39 @@ def _injection() -> Scenario:
 # -----------------------------------------------------------------------------
 
 VISION_CODE_PROBLEM = (
-    "Problem Statement: Write a Python function `two_sum(nums, target)` that returns "
-    "the indices of two numbers such that they add up to `target`.\n"
-    "Example: nums = [2, 7, 11, 15], target = 9 -> returns [0, 1]."
+    "2. Add Two Numbers\n"
+    "You are given two non-empty linked lists representing two non-negative integers. "
+    "The digits are stored in reverse order, and each of their nodes contains a single digit. "
+    "Add the two numbers and return the sum as a linked list.\n"
+    "Example 1:\n"
+    "Input: l1 = [2,4,3], l2 = [5,6,4]\n"
+    "Output: [7,0,8]\n"
+    "Explanation: 342 + 465 = 807.\n"
+    "Constraints: The number of nodes in each linked list is in the range [1, 100]."
 )
 
 VISION_CODE_SOLUTION = (
+    "# Definition for singly-linked list.\n"
+    "class ListNode:\n"
+    "    def __init__(self, val=0, next=None):\n"
+    "        self.val = val\n"
+    "        self.next = next\n"
+    "\n\n"
+    "def add_two_numbers(l1: ListNode, l2: ListNode) -> ListNode:\n"
+    "    dummy = ListNode(0)\n"
+    "    curr = dummy\n"
+    "    carry = 0\n"
+    "    while l1 or l2 or carry:\n"
+    "        v1 = l1.val if l1 else 0\n"
+    "        v2 = l2.val if l2 else 0\n"
+    "        total = v1 + v2 + carry\n"
+    "        carry = total // 10\n"
+    "        curr.next = ListNode(total % 10)\n"
+    "        curr = curr.next\n"
+    "        l1 = l1.next if l1 else None\n"
+    "        l2 = l2.next if l2 else None\n"
+    "    return dummy.next\n"
+    "\n\n"
     "def two_sum(nums: list[int], target: int) -> list[int]:\n"
     "    seen = {}\n"
     "    for i, num in enumerate(nums):\n"
@@ -665,9 +692,16 @@ VISION_CODE_SOLUTION = (
     "        seen[num] = i\n"
     "    return []\n\n"
     "if __name__ == '__main__':\n"
-    "    res = two_sum([2, 7, 11, 15], 9)\n"
-    "    assert res == [0, 1], f'Expected [0, 1], got {res}'\n"
-    "    print(f'Test passed: two_sum([2, 7, 11, 15], 9) == {res}')\n"
+    "    l1 = ListNode(2, ListNode(4, ListNode(3)))\n"
+    "    l2 = ListNode(5, ListNode(6, ListNode(4)))\n"
+    "    res = add_two_numbers(l1, l2)\n"
+    "    out = []\n"
+    "    while res:\n"
+    "        out.append(res.val)\n"
+    "        res = res.next\n"
+    "    assert out == [7, 0, 8], f'Expected [7, 0, 8], got {out}'\n"
+    "    print(f'Test passed: add_two_numbers([2,4,3], [5,6,4]) == {out}')\n"
+    "    assert two_sum([2, 7, 11, 15], 9) == [0, 1]\n"
 )
 
 
@@ -709,7 +743,7 @@ def _vision_code() -> Scenario:
                 1.0,
                 {
                     "code": VISION_CODE_SOLUTION,
-                    "stdout": "Test passed: two_sum([2, 7, 11, 15], 9) == [0, 1]\n",
+                    "stdout": "Test passed: add_two_numbers([2,4,3], [5,6,4]) == [7, 0, 8]\n",
                     "stderr": "",
                     "exit_code": 0,
                     "confidence": 1.0,
@@ -780,7 +814,19 @@ def select_scenario(text: str, agent: str, file_paths: list[str]) -> str:
         return "observation_branch"
 
     has_image = any(p.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".pdf")) for p in file_paths) or agent == "vision"
-    is_code = word("code", "python", "solve", "script", "program", "algorithm", "function") or "write code" in low or "solve for code" in low
+    code_words = (
+        "code", "python", "solve", "script", "program", "algorithm", "function",
+        "implement", "solution", "leetcode", "problem", "question", "numbers",
+        "add", "two", "interview", "array", "list", "linked", "write"
+    )
+    is_code = (
+        word(*code_words)
+        or any(phrase in low for phrase in [
+            "write code", "solve for code", "add two", "two numbers", "add two numbers",
+            "leetcode", "solve this", "solution", "how to solve"
+        ])
+        or (has_image and not low.strip())
+    )
 
     if has_image and is_code:
         return "vision_code"

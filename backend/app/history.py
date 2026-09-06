@@ -1,3 +1,4 @@
+
 """Durable, local conversation history for SETU.
 
 The live orchestration store remains in memory because it owns asyncio tasks,

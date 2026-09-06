@@ -124,6 +124,55 @@ _RETRY_PROMPT_TEMPLATE = (
 )
 
 
+def format_findings_text(findings: list[Finding]) -> str:
+    """Reconstruct natural lines and paragraphs from findings.
+
+    Prevents single-word findings (e.g. from Tesseract) from turning into one
+    word per line, grouping words by line based on bboxes and spacing.
+    """
+    if not findings:
+        return ""
+    # If findings already contain spaces or multi-line strings, preserve block structure
+    has_blocks = any(" " in (f.text or "").strip() for f in findings)
+    if has_blocks:
+        return "\n\n".join(f.text.strip() for f in findings if (f.text or "").strip())
+
+    lines: list[list[str]] = []
+    current_line: list[str] = []
+    last_page: Optional[int] = None
+    last_y: Optional[float] = None
+    last_h: Optional[float] = None
+
+    for f in findings:
+        text = (f.text or "").strip()
+        if not text:
+            continue
+        if f.bbox and len(f.bbox) == 4:
+            y_mid = (f.bbox[1] + f.bbox[3]) / 2.0
+            h = max(1.0, f.bbox[3] - f.bbox[1])
+            is_same_line = (
+                last_page == f.page
+                and last_y is not None
+                and abs(y_mid - last_y) <= max(8.0, (last_h or h) * 0.6)
+            )
+            if is_same_line:
+                current_line.append(text)
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = [text]
+                last_page = f.page
+                last_y = y_mid
+                last_h = h
+        else:
+            current_line.append(text)
+
+    if current_line:
+        lines.append(current_line)
+
+    return "\n".join(" ".join(words) for words in lines)
+
+
 class VisionAgent:
     name = "vision"
 
@@ -426,7 +475,7 @@ class VisionAgent:
             findings=all_findings,
             page_legibility=page_legibility,
             overall_confidence=overall_confidence,
-            raw_text="\n".join(raw_text_parts),
+            raw_text=format_findings_text(all_findings),
             injection_flags=[],  # P3 populates this downstream
         )
 
@@ -518,7 +567,7 @@ class VisionAgent:
                 findings=prior_findings,
                 page_legibility=page_leg,
                 overall_confidence=overall,
-                raw_text="\n".join(f.text for f in prior_findings),
+                raw_text=format_findings_text(prior_findings),
                 injection_flags=[],
             )
             payload = vision_out.model_dump()
@@ -579,7 +628,7 @@ class VisionAgent:
                 findings=prior_findings,
                 page_legibility=avg,
                 overall_confidence=overall,
-                raw_text="\n".join(f.text for f in prior_findings),
+                raw_text=format_findings_text(prior_findings),
                 injection_flags=[],
             )
             payload = vision_out.model_dump()
@@ -624,7 +673,7 @@ class VisionAgent:
             findings=merged_findings,
             page_legibility=page_legibility,
             overall_confidence=overall_confidence,
-            raw_text="\n".join(f.text for f in merged_findings),
+            raw_text=format_findings_text(merged_findings),
             injection_flags=[],
         )
         duration_ms = round((time.perf_counter() - t_start) * 1000, 1)

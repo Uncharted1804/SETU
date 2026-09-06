@@ -112,3 +112,76 @@ def test_coding_task_auto_creates_solution_artifact_if_not_explicitly_written(cl
     # Verify solution.py was automatically created and registered as artifact
     artifacts = client.get("/api/tasks/%s/artifacts" % task_id).json()
     assert any(a["name"] == "solution.py" for a in artifacts), "solution.py was not registered"
+
+
+def test_select_scenario_handles_add_two_numbers_and_empty_prompt():
+    assert select_scenario("2. Add Two Numbers", "vision", ["uploads/leetcode2.png"]) == "vision_code"
+    assert select_scenario("Add Two Numbers", "vision", ["uploads/leetcode2.png"]) == "vision_code"
+    assert select_scenario("", "vision", ["uploads/leetcode2.png"]) == "vision_code"
+    assert select_scenario("solve", "vision", ["uploads/question.png"]) == "vision_code"
+    assert select_scenario("leetcode problem", "vision", ["uploads/problem.png"]) == "vision_code"
+
+
+def test_format_findings_text_groups_words_by_line():
+    from app.agents.vision import format_findings_text
+    from app.contracts import Finding
+
+    words = ["2.", "Add", "Two", "Numbers"]
+    findings = [
+        Finding(
+            id=f"f_{i}",
+            text=w,
+            page=1,
+            bbox=[float(10 + i * 40), 20.0, float(40 + i * 40), 35.0],
+            confidence=0.9,
+            source_file="test.png",
+            extraction_tier="tesseract",
+        )
+        for i, w in enumerate(words)
+    ]
+    # Next line
+    findings.append(
+        Finding(
+            id="f_next",
+            text="Medium",
+            page=1,
+            bbox=[10.0, 50.0, 60.0, 65.0],
+            confidence=0.9,
+            source_file="test.png",
+            extraction_tier="tesseract",
+        )
+    )
+
+    formatted = format_findings_text(findings)
+    assert formatted == "2. Add Two Numbers\nMedium"
+    assert "2.\nAdd" not in formatted
+
+
+def test_resolve_tool_placeholders_never_writes_raw_text_to_py_files():
+    from app.contracts import Observation, PlanStep
+    from app.orchestration.executor import _resolve_tool_placeholders
+
+    step = PlanStep(
+        n=2,
+        kind="tool",
+        target="write_file",
+        args={"path": "solution.py", "content": "<generated_code>"},
+        why="Save code",
+    )
+    # Vision observation with raw_text
+    obs = [
+        Observation(
+            step_n=1,
+            kind="agent",
+            target="vision",
+            ok=True,
+            summary="Extracted text",
+            payload={"raw_text": "2.\nAdd\nTwo\nNumbers"},
+            confidence=0.9,
+            iteration=1,
+        )
+    ]
+    _resolve_tool_placeholders(step, obs)
+    # Must NOT have resolved to raw_text!
+    assert step.args["content"] != "2.\nAdd\nTwo\nNumbers"
+    assert step.args["content"] == "<generated_code>"

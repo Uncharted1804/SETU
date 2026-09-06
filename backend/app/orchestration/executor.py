@@ -406,6 +406,9 @@ def _resolve_tool_placeholders(step: PlanStep, observations: list[Observation]) 
     if not is_placeholder:
         return
 
+    target_path = str(step.args.get("path") or "").lower()
+    is_code_file = target_path.endswith((".py", ".js", ".ts", ".sh", ".sql", ".cpp", ".c", ".java"))
+
     # Look backwards through observations for generated text or code
     for obs in reversed(observations):
         payload = obs.payload or {}
@@ -417,8 +420,8 @@ def _resolve_tool_placeholders(step: PlanStep, observations: list[Observation]) 
         if payload.get("content"):
             step.args["content"] = str(payload["content"])
             return
-        # 3. Vision agent raw text or findings text
-        if payload.get("raw_text"):
+        # 3. Vision agent raw text or findings text (NEVER to a code file)
+        if payload.get("raw_text") and not is_code_file:
             step.args["content"] = str(payload["raw_text"])
             return
 
