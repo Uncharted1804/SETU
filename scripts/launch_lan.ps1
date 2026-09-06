@@ -101,8 +101,13 @@ function Get-TrustedSubnet {
         (($network -shr 24) -band 0xFF), (($network -shr 16) -band 0xFF),
         (($network -shr 8) -band 0xFF), ($network -band 0xFF)
     )
+    $maskBytes = [byte[]]@(
+        (($mask -shr 24) -band 0xFF), (($mask -shr 16) -band 0xFF),
+        (($mask -shr 8) -band 0xFF), ($mask -band 0xFF)
+    )
     $normalised = ([System.Net.IPAddress]::new($networkBytes)).ToString() + "/$prefix"
-    return [pscustomobject]@{ Network = $network; Broadcast = $broadcast; Cidr = $normalised }
+    $firewallRemote = ([System.Net.IPAddress]::new($networkBytes)).ToString() + "/" + ([System.Net.IPAddress]::new($maskBytes)).ToString()
+    return [pscustomobject]@{ Network = $network; Broadcast = $broadcast; Cidr = $normalised; FirewallRemote = $firewallRemote }
 }
 
 function Assert-Administrator {
@@ -123,6 +128,7 @@ function Test-ScopedFirewallRule {
         [Parameter(Mandatory)][string]$RuleName,
         [Parameter(Mandatory)][string]$Address,
         [Parameter(Mandatory)][string]$Subnet,
+        [Parameter(Mandatory)][string]$FirewallRemote,
         [Parameter(Mandatory)][int]$ListenPort
     )
 
@@ -138,7 +144,7 @@ function Test-ScopedFirewallRule {
             $_.Protocol -eq "TCP" -and $_.LocalPort.ToString() -eq $ListenPort.ToString()
         }
         $addressMatches = $addresses | Where-Object {
-            @($_.LocalAddress) -contains $Address -and @($_.RemoteAddress) -contains $Subnet
+            @($_.LocalAddress) -contains $Address -and (@($_.RemoteAddress) -contains $Subnet -or @($_.RemoteAddress) -contains $FirewallRemote)
         }
         if ($portMatches -and $addressMatches) {
             return $true
@@ -203,7 +209,7 @@ $ruleName = Get-RuleName $BindAddress $Port
 if ($ConfigureFirewall) {
     Set-ScopedFirewallRule $ruleName $BindAddress $subnet.Cidr $Port
 }
-if (-not (Test-ScopedFirewallRule $ruleName $BindAddress $subnet.Cidr $Port)) {
+if (-not (Test-ScopedFirewallRule $ruleName $BindAddress $subnet.Cidr $subnet.FirewallRemote $Port)) {
     throw @"
 Refusing LAN launch: no exact enabled firewall rule was found.
 Required: inbound TCP local $BindAddress`:$Port; remote $($subnet.Cidr); Private profile only; Allow.
