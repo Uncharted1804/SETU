@@ -775,12 +775,12 @@ graph TD
 | **Network Monitor** | P4 | **NOT_STARTED** | No file | psutil / socket | Implement subnet check & counter |
 | **Preflight Script** | P4 | **NOT_STARTED** | No file | Python 3.12 | Author `scripts/preflight.py` |
 | **Frontend UI** | P5 | **NOT_STARTED** | No `frontend/` directory | Node / Vite | Initialize frontend workspace |
-| **Document Generator (docgen.py)** | P6 | **NOT_STARTED** | No file | python-docx | Create template renderer |
-| **Spreadsheet Tool (sheets.py)** | P6 | **NOT_STARTED** | No file | openpyxl, pandas | Implement `describe`/`read`/`write` |
-| **Audit Logger (audit.py)** | P6 | **NOT_STARTED** | No file | hashlib, json | Implement hash-chain JSONL |
-| **Audit Verifier Script** | P6 | **NOT_STARTED** | No file | `audit.py` | Implement `scripts/verify_audit.py` |
-| **Model Integrity Verifier** | P6 | **NOT_STARTED** | No file | hashlib | Implement digest verification |
-| **Demo Assets & Corpus** | P6 / P3 | **NOT_STARTED** | No files | Word, Excel, Scanner | Fabricate noisy xlsx & scanned pdf |
+| **Document Generator (docgen.py)** | P6 | **IMPLEMENTED** | `backend/app/tools/docgen.py` | python-docx | Done |
+| **Spreadsheet Tool (sheets.py)** | P6 | **IMPLEMENTED** | `backend/app/tools/sheets.py` | openpyxl, pandas | Done |
+| **Audit Logger (audit.py)** | P6 | **IMPLEMENTED** | `backend/app/security/audit.py` | hashlib, json | Done |
+| **Audit Verifier Script** | P6 | **IMPLEMENTED** | `scripts/verify_audit.py` | `audit.py` | Done |
+| **Model Integrity Verifier** | P6 | **IMPLEMENTED** | `backend/app/security/integrity.py` | hashlib | Done |
+| **Demo Assets & Corpus** | P6 / P3 | **IMPLEMENTED** | `templates/`, `data/demo_assets/` | Word, Excel, Scanner | Done |
 
 ---
 
@@ -1043,7 +1043,8 @@ The frontend (P5) depends strictly on these SSE event types streamed from P1's b
 
 | Area | Test / Check | Command | Result | Last Verified | Notes |
 |------|--------------|---------|--------|---------------|-------|
-| Full Backend Suite | 243 pytest test suites pass | `python -m pytest backend/tests/` | **PASSED** (243 passed, 1 skipped) | 2026-09-06 05:20 | Complete backend test verification |
+| Full Backend Suite | 243 pytest test suites pass | `python -m pytest backend/tests/` | **PASSED** (243 passed, 1 skipped) | 2026-09-06 05:20 | Complete backend test verification. Note: P1 SSE bug is RESOLVED on `origin/master` (fix `9154aab`). |
+| P6 Deliverables | 17 P6-focused tests pass | P6 test subset | **PASSED** | 2026-09-06 | 17/17 PASS. P6 deliverables commit: `05a6b76` |
 | Scaffolding | Git ignores intermediate files | `touch .tmp/scratch.txt && git status` | **PASSED** (`.tmp/scratch.txt` ignored) | 2026-09-05 22:59 | Verified `.gitignore` configuration |
 | Python Environment | Python 3.12 syntax & imports | `python -m pytest backend/tests/test_contracts.py` | **PASSED** | 2026-09-06 05:15 | Core contracts and models verified |
 | API Spine | Health check returns 200 | `curl -f http://localhost:8000/api/health` | **NOT_RUN** | UNKNOWN | Blocked on `main.py` implementation |
