@@ -21,6 +21,7 @@ teammate with neither installed can still run the whole app.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from ..config import Settings
@@ -89,7 +90,8 @@ class KnowledgeBase:
         self._collection = None
         self._embedder = None
 
-    def _ensure(self):
+    def _open_collection(self):
+        """Open the configured persistent collection without changing its data."""
         if self._collection is not None:
             return self._collection
         chromadb = optional_import("chromadb", owner="P3", purpose="knowledge base")
@@ -98,6 +100,38 @@ class KnowledgeBase:
             COLLECTION, metadata={"hnsw:space": "cosine"}
         )
         return self._collection
+
+    def _corpus_documents(self) -> list[tuple[str, int, str]]:
+        """Read the configured corpus in a deterministic order.
+
+        Only the corpus directory is authoritative. A fresh machine must not
+        depend on a copied Chroma directory or a manually remembered CLI step.
+        """
+        corpus = Path(self.settings.kb_corpus)
+        if not corpus.is_dir():
+            raise ToolError(
+                ErrorCode.NOT_FOUND,
+                "knowledge base corpus is missing at %s" % corpus,
+            )
+
+        docs = [
+            (path.name, 1, path.read_text(encoding="utf-8"))
+            for path in sorted(corpus.glob("*.md"))
+            if path.is_file() and path.stat().st_size > 0
+        ]
+        if not docs:
+            raise ToolError(
+                ErrorCode.NOT_FOUND,
+                "knowledge base corpus at %s contains no non-empty Markdown documents" % corpus,
+            )
+        return docs
+
+    def _ensure(self):
+        """Return a collection, bootstrapping an empty one from the corpus once."""
+        collection = self._open_collection()
+        if collection.count() == 0:
+            self._ingest_documents(collection, self._corpus_documents())
+        return collection
 
     def _embed(self, texts: list[str]) -> list[list[float]]:
         if self._embedder is None:
@@ -108,14 +142,13 @@ class KnowledgeBase:
             self._embedder = st.SentenceTransformer(EMBED_MODEL, device="cpu")
         return [list(map(float, v)) for v in self._embedder.encode(texts)]
 
-    def ingest(self, docs: Iterable[tuple[str, int, str]]) -> int:
-        """Ingest documents into Chroma collection.
+    def _ingest_documents(self, collection, docs: Iterable[tuple[str, int, str]]) -> int:
+        """Ingest documents into an already-open Chroma collection.
 
         `docs` is an iterable of (source_file, page, text).
         Chunks each doc with chunk_text(), scans with scan() before indexing,
         quarantines flagged chunks, and stores metadata (chunk_id, source_file, page, trust_level).
         """
-        collection = self._ensure()
         from ..security.injection import scan
 
         ids: list[str] = []
@@ -157,6 +190,10 @@ class KnowledgeBase:
             )
 
         return len(documents)
+
+    def ingest(self, docs: Iterable[tuple[str, int, str]]) -> int:
+        """Ingest explicit documents without implicitly adding the full corpus."""
+        return self._ingest_documents(self._open_collection(), docs)
 
     def search(self, query: str, k: int = DEFAULT_TOP_K) -> list[Chunk]:
         collection = self._ensure()
