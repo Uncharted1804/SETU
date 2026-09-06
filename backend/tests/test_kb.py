@@ -8,6 +8,34 @@ from app.tools.base import ToolContext
 from app.tools.kb import KnowledgeBase, kb_search
 
 
+class _CountingCollection:
+    def __init__(self, count=0):
+        self.count_value = count
+
+    def count(self):
+        return self.count_value
+
+
+def test_empty_collection_bootstraps_the_configured_corpus_once(monkeypatch):
+    """A fresh persistent collection must not depend on a separate CLI ingest."""
+    kb = KnowledgeBase(get_settings())
+    collection = _CountingCollection()
+    ingests = []
+
+    monkeypatch.setattr(kb, "_open_collection", lambda: collection)
+
+    def populate(target, docs):
+        ingests.append(target)
+        assert docs
+        target.count_value = 1
+
+    monkeypatch.setattr(kb, "_ingest_documents", populate)
+
+    assert kb._ensure() is collection
+    assert kb._ensure() is collection
+    assert ingests == [collection]
+
+
 def test_kb_ingest_and_quarantine(tmp_path):
     # Use ephemeral/temporary path for test isolation
     settings = get_settings()
