@@ -38,8 +38,11 @@ current state is:
   Read `docs/STATUS.md`, `docs/TEAM_HANDOFF.md`, and `docs/CONTRACTS.md` before
   claiming a component works.
 - P5 (Mugdh) owns all of `frontend/`. The React/Vite/Tailwind mock-mode UI is
-  implemented; its functional surfaces are real and its visual polish remains
-  intentionally minimal.
+  implemented. It has durable, server-owned conversation history backed by
+  SQLite and an HttpOnly session cookie; the chat-first research-ledger shell
+  has attachment staging, collapsible plan/artifact evidence, history at left,
+  and Network/Audit proof at right. Task, approval, SSE, audit, and API
+  semantics remain unchanged.
 - P5 Phase 0 Step 1 baseline is recorded at
   `.tmp/ui-baseline/2026-09-06/manifest.md`. The Network proof panel polls
   `/api/network-status` immediately on mount and every **500 ms**; this is a
@@ -62,13 +65,12 @@ current state is:
 - Current worktree changes are the intentional documentation alignment for the
   Python/Node/npm standards plus this reconciliation. Review them before commit.
 
-**Current P5 objective:** Phase 0 is user-accepted. The next safe work is
-Phase 1 UX architecture and visual-system planning; wait for explicit approval
-before implementing the UI/UX redesign.
+**Current P5 objective:** The user selected the second UI direction. Its
+implementation is complete pending direct browser visual review and handoff.
 
-**P5 continuation document:** `context.md` is the concise roadmap and decision
-context for work after Phase 0. Read it with this file and the authoritative
-status/contracts documents before resuming P5 work.
+**P5 continuation document:** `context.md` was previously present but is not in
+the current workspace. Use this file with the authoritative status/contracts
+documents before resuming P5 work.
 
 ## SECTION 1 — PROJECT IDENTITY
 
@@ -79,7 +81,7 @@ status/contracts documents before resuming P5 work.
 - **Organization:** UNKNOWN — REQUIRES VERIFICATION
 - **One-sentence description:** Sovereign, multi-model AI assistant running locally on organizational hardware to securely process confidential documents and generate deliverables.
 - **Core goal:** To prove sovereignty by architecture, not by promise, via a local open-weight multi-agent system orchestrating tasks like OCR, reasoning, and coding without internet access.
-- **Current phase:** P5 Phase 0 user-accepted; Phase 1 planning next
+- **Current phase:** P5 Phase 2 implementation - pending visual/browser review
 - **Last updated timestamp:** 2026-09-06
 - **Last updated by:** Codex
 
@@ -341,21 +343,53 @@ Integration impact:
 Status:
 - Initialized
 
+### 2026-09-06 — Codex (P5)
+Changed:
+- Committed the project-runtime/documentation alignment and Network 500 ms
+  polling change as `98bf3bb`.
+- Rebuilt the P5 frontend as a chat-first task workspace.
+- Added local light/dark appearance preference, attachment staging, a labelled
+  Add icon, optional Network/Audit disclosure drawers, and an empty task state.
+- Removed Models and mock-scenario controls from the normal user-facing UI and
+  removed model names from displayed route information.
+
+Preserved:
+- API shapes, SSE event subscriptions, task polling, approval semantics,
+  audit evidence, and mock-mode truthfulness.
+
+Tests:
+- `npm run typecheck` - passed.
+- `npm run build` - passed.
+- `.venv\Scripts\python.exe scripts\check_contract_sync.py` - passed (15
+  interfaces and 4 unions).
+
+Status:
+- IMPLEMENTED - browser visual validation and scenario-matrix regression remain.
+
 ## SECTION 16 — HANDOFF / CONTINUATION STATE
 
-CURRENT OBJECTIVE: Prepare P5 Phase 1 UX architecture and visual-system planning.
-CURRENTLY WORKING ON: Phase 0 was user-accepted without screenshots; no UI/UX redesign implementation has begun.
-FILES BEING TOUCHED: Documentation only — `AI_onboarding.md`, `SETUP_GUIDE.md`,
-`SETU_MASTER_BLUEPRINT_v2.md`, `docs/DECISIONS.md`, and
-`docs/FROZEN_VERSIONS.txt`.
-WHAT IS WORKING: The populated integration scaffold, Python 3.12.10 virtual
-environment, locked backend dependencies, and a successfully built frontend.
-WHAT IS NOT YET VERIFIED: Independently captured browser screenshots/direct visual rendering, offline wheel cache, real-mode services, and hardware gates.
-LAST VERIFIED COMMAND: `cd frontend && npm run build`
-LAST VERIFIED RESULT: Passed; generated `frontend/dist`.
-CURRENT BLOCKER: None for Phase 1 planning. UI/UX implementation still requires explicit user approval.
-NEXT ACTION: Produce and approve the Phase 1 UX architecture/design brief, then
-wait for explicit approval before starting UI/UX implementation.
+CURRENT OBJECTIVE: Validate and hand off the user-selected research-ledger chat
+workspace.
+CURRENTLY WORKING ON: The frontend has durable, server-owned session history
+and a three-rail research-ledger layout: session history, conversation, and
+proof. It keeps the existing light/dark control, attachments, collapsible plan
+and artifact surfaces, and hides models/mock scenarios from the normal UI.
+FILES BEING TOUCHED: `frontend/src/App.tsx`, `frontend/src/components/common.tsx`,
+`frontend/src/components/task.tsx`, `frontend/src/components/workspace.tsx`,
+`frontend/src/index.css`, `frontend/tailwind.config.js`, and this handoff.
+WHAT IS WORKING: Existing task submission/upload, approval, SSE, artifact,
+audit, and network surfaces are retained behind the redesigned layout. Session
+history is stored server-side in local SQLite and active-session state is held
+in a same-origin HttpOnly cookie; no Chrome local storage is required.
+WHAT IS NOT YET VERIFIED: Direct browser visual rendering at desktop/mobile
+widths, keyboard use, individual mock-scenario regressions through the new UI,
+offline wheel cache, real-mode services, and hardware gates.
+LAST VERIFIED COMMAND: `cd frontend && npm run typecheck; npm run build; cd ..; .\.venv\Scripts\python.exe -m pytest backend\tests -q; .\.venv\Scripts\python.exe scripts\check_contract_sync.py`
+LAST VERIFIED RESULT: Typecheck/build passed; backend tests: 201 passed, 1 skipped; contract check reported 15 interfaces and 4 unions.
+CURRENT BLOCKER: None. Browser visual validation is the next quality gate.
+NEXT ACTION: Review the chat workspace in a browser (light/dark, keyboard,
+mobile width, approval/write approval, and optional evidence drawers), then
+run the mock scenario matrix before the Phase 2 handoff.
 DO NOT CHANGE: Shared backend contracts or another owner's files without
 coordination. Do not change the host Python 3.12.10, Node.js v24.15.0, npm 11.12.1, or
 ChromaDB decisions without explicit user approval.
@@ -488,3 +522,48 @@ When verification is missing: `Status: IMPLEMENTED — NOT YET VERIFIED`.
 15. Multiple models may be registered while VRAM is managed carefully.
 16. Frontend deployment is intended to use the backend's same-origin serving model.
 17. Important sovereignty/security claims must be demonstrable, not merely written in documentation.
+
+## SECTION 29 - LATEST P5 CHANGE
+
+### 2026-09-06 - Codex (P5), research-ledger direction
+
+Changed:
+- Added durable server-owned session history with local SQLite storage and an
+  HttpOnly same-origin cookie. Historical sessions, terminal task snapshots,
+  artifacts, and bounded same-session context can be restored without browser
+  local storage.
+- Applied the user-selected second visual direction: bright sans-led reading
+  canvas, dark history rail, compact right-side proof rail, restrained evidence
+  accent, collapsible plan/artifacts, and the existing scroll-aware composer.
+
+Preserved:
+- Existing upload, task creation, SSE, approval, artifact download, network,
+  audit, and contract behaviours. No required API payload was changed or removed.
+
+Verification:
+- `npm run typecheck` and `npm run build` passed.
+- Backend tests: 201 passed, 1 skipped.
+- Contract sync passed: 15 interfaces and 4 unions.
+- Direct browser visual review remains unrecorded.
+
+Runtime note (2026-09-06):
+- Replaced the stale local development backend on port 8000 with the current
+  application. `/api/sessions` now returns 200 and `/api/sessions/current`
+  returns the expected 204 when no session cookie is present.
+
+Environment note (2026-09-06):
+- Verified Node.js `v24.15.0`; no Node.js installation or modification was
+  needed. Ran `npx @framer/agent@latest setup` successfully. The setup
+  installed two Framer skills under the user-level agent skill directories.
+
+UI refinement (2026-09-06):
+- Added in-memory collapsible desktop rails: history can also be toggled with
+  `[`, and the proof rail has its own direct control. The responsive drawer
+  behaviour remains unchanged on smaller screens.
+- Moved the artifact disclosure control into a utility strip above the composer
+  text area, leaving attachments and send actions in the lower action row.
+- Reduced unnecessary panel treatment by relying on spacing and hairline
+  dividers, while preserving visible focus, error, composer, and artifact
+  affordances. No API or backend change was made.
+- Re-verified `npm run typecheck`, `npm run build`, backend tests (201 passed,
+  1 skipped), and contract sync (15 interfaces and 4 unions).

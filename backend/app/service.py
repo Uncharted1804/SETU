@@ -24,7 +24,8 @@ from typing import Optional
 
 from .agents import AgentRegistry, build_agents
 from .config import MAX_ITERATIONS, ModelRegistry, Settings, get_registry, get_settings
-from .contracts import RouterDecision, TaskCreateRequest, TaskEnvelope
+from .contracts import RouterDecision, TaskCreateRequest, TaskEnvelope, TaskResult
+from .history import HistoryStore
 from .orchestration.dispatcher import Dispatcher
 from .orchestration.events import EventBus
 from .orchestration.executor import Executor
@@ -47,12 +48,14 @@ class SetuService:
         agents: AgentRegistry,
         tools: ToolRegistry,
         audit: AuditLog,
+        history: HistoryStore,
     ) -> None:
         self.settings = settings
         self.models = models
         self.agents = agents
         self.tools = tools
         self.audit = audit
+        self.history = history
         self.bus = EventBus()
         self.store = TaskStore()
         self.monitor = NetworkMonitor(settings)
@@ -70,20 +73,26 @@ class SetuService:
             agents=build_agents(settings, models),
             tools=build_registry(settings),
             audit=AuditLog(settings.audit_path),
+            history=HistoryStore(settings.history_path),
         )
 
     # -- task lifecycle ------------------------------------------------------
 
-    def create_task(self, req: TaskCreateRequest) -> tuple[TaskRecord, RouterDecision, Planner]:
+    def create_task(
+        self, req: TaskCreateRequest, session_id: Optional[str] = None
+    ) -> tuple[TaskRecord, RouterDecision, Planner]:
         """Route and plan-select synchronously so the caller gets a decision
         immediately; execution is started separately by `start`."""
+        resolved_session_id = session_id or req.session_id or new_session_id()
         envelope = TaskEnvelope(
-            session_id=req.session_id or new_session_id(),
+            session_id=resolved_session_id,
             task_id=new_task_id(),
             text=req.text,
             file_paths=list(req.file_paths),
+            conversation_context=self.history.context(resolved_session_id),
         )
         record = self.store.create(envelope, mock_mode=self.settings.mock_mode)
+        self.history.add_turn(record)
         decision = route_task(envelope, self.models)
         record.router_decision = decision
 
@@ -125,11 +134,16 @@ class SetuService:
             )
 
         async def _run() -> None:
+            result: Optional[TaskResult] = None
             if self.settings.mock_mode and record.scenario:
                 from .mocks.adapters import set_scenario as _set
 
                 _set(record.scenario)  # ContextVar is set inside the task's context
-            await self.executor.execute_plan(record, decision, planner)
+            try:
+                result = await self.executor.execute_plan(record, decision, planner)
+            finally:
+                if record.is_terminal:
+                    self.history.finalise_turn(record, result)
 
         record.runner = asyncio.create_task(_run(), name="setu-task-" + record.task_id)
 

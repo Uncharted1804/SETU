@@ -4,14 +4,14 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#0b0d10",
-        panel: "#13171c",
-        edge: "#232a33",
-        muted: "#8b97a8",
-        accent: "#4da3ff",
-        good: "#39d98a",
-        warn: "#f5c451",
-        bad: "#ff6b6b",
+        ink: "rgb(var(--setu-ink) / <alpha-value>)",
+        panel: "rgb(var(--setu-panel) / <alpha-value>)",
+        edge: "rgb(var(--setu-edge) / <alpha-value>)",
+        muted: "rgb(var(--setu-muted) / <alpha-value>)",
+        accent: "rgb(var(--setu-accent) / <alpha-value>)",
+        good: "rgb(var(--setu-good) / <alpha-value>)",
+        warn: "rgb(var(--setu-warn) / <alpha-value>)",
+        bad: "rgb(var(--setu-bad) / <alpha-value>)",
       },
       fontFamily: {
         // Local system stacks only. No remote fonts, no CDN, no analytics -

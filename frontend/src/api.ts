@@ -20,6 +20,8 @@ import type {
   MockScenario,
   ModelRegistryView,
   NetworkStatus,
+  SessionDetail,
+  SessionSummary,
   TaskStatus,
 } from "./types";
 
@@ -28,6 +30,7 @@ export const API_BASE: string = import.meta.env.VITE_API_BASE ?? "";
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(API_BASE + path, {
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     ...init,
   });
   if (!response.ok) {
@@ -43,8 +46,21 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function optionalJson<T>(path: string): Promise<T | null> {
+  const response = await fetch(API_BASE + path, { credentials: "include" });
+  if (response.status === 204) return null;
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.json();
+}
+
 export const api = {
   health: () => json<HealthResponse>("/api/health"),
+
+  sessions: () => json<SessionSummary[]>("/api/sessions"),
+  currentSession: () => optionalJson<SessionDetail>("/api/sessions/current"),
+  newSession: () => json<SessionDetail>("/api/sessions", { method: "POST" }),
+  activateSession: (sessionId: string) =>
+    json<SessionDetail>(`/api/sessions/${sessionId}/activate`, { method: "POST" }),
 
   createTask: (text: string, filePaths: string[], scenario?: string) =>
     json<{ task_id: string; session_id: string; stream_url: string }>("/api/tasks", {
@@ -70,7 +86,11 @@ export const api = {
   upload: async (file: File): Promise<{ path: string; stored_name: string }> => {
     const form = new FormData();
     form.append("file", file);
-    const response = await fetch(API_BASE + "/api/upload", { method: "POST", body: form });
+    const response = await fetch(API_BASE + "/api/upload", {
+      method: "POST",
+      body: form,
+      credentials: "include",
+    });
     if (!response.ok) throw new Error(`upload failed: ${response.status}`);
     return response.json();
   },

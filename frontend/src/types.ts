@@ -235,3 +235,27 @@ export interface HealthResponse {
   mock_mode: boolean;
   version: string;
 }
+
+export interface SessionSummary {
+  session_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  turn_count: number;
+  last_state?: TaskState | null;
+}
+
+export interface SessionTurn {
+  task_id: string;
+  user_text: string;
+  file_paths: string[];
+  state: TaskState;
+  assistant_text: string | null;
+  status: TaskStatus | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionDetail extends SessionSummary {
+  turns: SessionTurn[];
+}

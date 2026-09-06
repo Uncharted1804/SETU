@@ -10,6 +10,10 @@ Concrete paths, used identically by the frontend and the docs:
 
     GET  /api/health                     liveness, always cheap
     GET  /api/ready                      readiness checks, never claims an unrun check
+    POST /api/sessions                   create and activate a durable conversation
+    GET  /api/sessions                   list durable conversations
+    GET  /api/sessions/current           restore the cookie-selected conversation
+    POST /api/sessions/{id}/activate     switch the cookie-selected conversation
     POST /api/tasks                      create + start a task
     GET  /api/tasks                      recent tasks
     GET  /api/tasks/{task_id}            task status
@@ -32,13 +36,14 @@ import asyncio
 import secrets
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
 from ..config import MAX_ATTEMPTS, MAX_ITERATIONS, THRESHOLDS, VERSION
 from ..contracts import (
     ApprovalDecision,
+    ArtifactRef,
     HealthResponse,
     ModelRegistryView,
     ReadinessCheck,
@@ -48,6 +53,7 @@ from ..contracts import (
 )
 from ..orchestration.approvals import ApprovalConflict, ApprovalGate
 from ..orchestration.events import sse_payload
+from ..orchestration.state import new_session_id
 from ..security.paths import PathEscape, safe_storage_name
 from ..service import SetuService
 
@@ -55,6 +61,8 @@ router = APIRouter(prefix="/api")
 
 #: Upload cap.  A refinery scan is a few MB; anything larger is a mistake.
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
+SESSION_COOKIE = "setu_active_session"
+SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 180
 
 
 def _svc(request: Request) -> SetuService:
@@ -62,6 +70,26 @@ def _svc(request: Request) -> SetuService:
     if service is None:
         raise HTTPException(status_code=503, detail="service not initialised")
     return service
+
+
+def _set_session_cookie(request: Request, response: Response, session_id: str) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=session_id,
+        max_age=SESSION_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        path="/api",
+    )
+
+
+def _active_session(request: Request, requested: Optional[str] = None) -> Optional[str]:
+    history = _svc(request).history
+    if requested and history.has_session(requested):
+        return requested
+    cookie_id = request.cookies.get(SESSION_COOKIE)
+    return cookie_id if history.has_session(cookie_id) else None
 
 
 # -----------------------------------------------------------------------------
@@ -140,12 +168,59 @@ async def ready(request: Request) -> ReadinessResponse:
 
 
 # -----------------------------------------------------------------------------
+# Sessions
+# -----------------------------------------------------------------------------
+
+
+@router.post("/sessions", status_code=201)
+async def create_session(request: Request, response: Response):
+    service = _svc(request)
+    session_id = new_session_id()
+    detail = service.history.create_session(session_id)
+    _set_session_cookie(request, response, session_id)
+    return detail
+
+
+@router.get("/sessions/current")
+async def current_session(request: Request):
+    session_id = _active_session(request)
+    if session_id is None:
+        return Response(status_code=204)
+    detail = _svc(request).history.get_session(session_id)
+    return detail if detail is not None else Response(status_code=204)
+
+
+@router.get("/sessions")
+async def list_sessions(request: Request, limit: int = Query(default=100, ge=1, le=200)):
+    return _svc(request).history.list_sessions(limit)
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(request: Request, session_id: str):
+    detail = _svc(request).history.get_session(session_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="no such session")
+    return detail
+
+
+@router.post("/sessions/{session_id}/activate")
+async def activate_session(request: Request, response: Response, session_id: str):
+    detail = _svc(request).history.get_session(session_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="no such session")
+    _set_session_cookie(request, response, session_id)
+    return detail
+
+
+# -----------------------------------------------------------------------------
 # Tasks
 # -----------------------------------------------------------------------------
 
 
 @router.post("/tasks", response_model=TaskCreateResponse, status_code=201)
-async def create_task(request: Request, body: TaskCreateRequest) -> TaskCreateResponse:
+async def create_task(
+    request: Request, response: Response, body: TaskCreateRequest
+) -> TaskCreateResponse:
     service = _svc(request)
     if body.scenario and not service.settings.mock_mode:
         raise HTTPException(
@@ -154,8 +229,13 @@ async def create_task(request: Request, body: TaskCreateRequest) -> TaskCreateRe
                    "(SETU_MOCK_MODE=0); the request was refused rather than "
                    "silently running a fixture",
         )
-    record, decision, planner = service.create_task(body)
+    session_id = _active_session(request, body.session_id)
+    if session_id is None:
+        session_id = new_session_id()
+        service.history.create_session(session_id)
+    record, decision, planner = service.create_task(body, session_id=session_id)
     await service.start(record, decision, planner)
+    _set_session_cookie(request, response, session_id)
     return TaskCreateResponse(
         task_id=record.task_id,
         session_id=record.envelope.session_id,
@@ -175,7 +255,10 @@ async def task_status(request: Request, task_id: str):
     service = _svc(request)
     record = service.store.get(task_id)
     if record is None:
-        raise HTTPException(status_code=404, detail="no such task")
+        snapshot = service.history.task_status(task_id)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="no such task")
+        return snapshot
     return record.to_status(service.max_iterations).model_dump()
 
 
@@ -228,7 +311,10 @@ async def approve(request: Request, task_id: str, decision: ApprovalDecision):
     service = _svc(request)
     record = service.store.get(task_id)
     if record is None:
-        raise HTTPException(status_code=404, detail="no such task")
+        snapshot = service.history.task_status(task_id)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="no such task")
+        return snapshot.get("artifacts", [])
     gate = ApprovalGate(record)
     try:
         resolved = gate.resolve(decision.approval_id, decision.approved)
@@ -267,6 +353,9 @@ async def download_artifact(request: Request, task_id: str, artifact_id: str):
     """Task-scoped lookup by opaque id.  A client never supplies a path."""
     service = _svc(request)
     ref = service.store.artifact(task_id, artifact_id)
+    if ref is None:
+        persisted = service.history.artifact(task_id, artifact_id)
+        ref = ArtifactRef.model_validate(persisted) if persisted else None
     if ref is None:
         raise HTTPException(status_code=404, detail="no such artifact for this task")
     try:

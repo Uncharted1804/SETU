@@ -14,15 +14,45 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`rounded-lg border border-edge bg-panel ${className}`}>
-      <header className="flex items-center justify-between border-b border-edge px-3 py-2">
+    <section className={`flat-panel ${className}`}>
+      <header className="flex items-center justify-between border-b border-edge/60 py-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
           {title}
         </h2>
         {right}
       </header>
-      <div className="p-3">{children}</div>
+      <div className="py-3">{children}</div>
     </section>
+  );
+}
+
+/** A native disclosure keeps optional evidence keyboard-accessible by default. */
+export function Collapsible({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="group border-b border-edge/60">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-2.5 marker:content-none">
+        <span>
+          <span className="text-xs font-semibold text-slate-200">{title}</span>
+          <span className="ml-2 text-[11px] text-muted">{description}</span>
+        </span>
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180"
+        >
+          <path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+        </svg>
+      </summary>
+      <div className="pb-3">{children}</div>
+    </details>
   );
 }
 

@@ -37,6 +37,7 @@ models/
 data/workspace/*
 !data/workspace/.gitkeep
 data/chroma/
+data/setu_history.sqlite3*
 logs/
 *.jsonl
 

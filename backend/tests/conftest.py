@@ -32,6 +32,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("SETU_MOCK_MODE", "1")
     monkeypatch.setenv("SETU_WORKSPACE", str(workspace))
     monkeypatch.setenv("SETU_AUDIT_PATH", str(tmp_path / "logs" / "audit.jsonl"))
+    monkeypatch.setenv("SETU_HISTORY_PATH", str(tmp_path / "data" / "history.sqlite3"))
     monkeypatch.delenv("SETU_TRUSTED_SUBNET", raising=False)
     monkeypatch.delenv("SETU_DEV_MODE", raising=False)
     monkeypatch.delenv("SETU_DEV_ORIGINS", raising=False)
