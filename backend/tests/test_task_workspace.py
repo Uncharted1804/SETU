@@ -333,10 +333,11 @@ def test_no_file_paths_is_still_a_valid_task(service):
 
 
 def test_the_upload_endpoint_records_the_session(client):
+    session_id = client.post("/api/sessions").json()["session_id"]
     r = client.post(
         "/api/upload",
         files={"file": ("scan.pdf", b"%PDF-1.4 x", "application/pdf")},
-        data={"session_id": "session_A"},
+        data={"session_id": session_id},
     )
     assert r.status_code == 200
     rel = r.json()["path"]
@@ -345,22 +346,23 @@ def test_the_upload_endpoint_records_the_session(client):
     staged = service.uploads.get(rel)
 
     assert staged is not None, "upload was not staged; session_id is still unused"
-    assert staged.session_id == "session_A"
+    assert staged.session_id == session_id
     assert staged.uploaded_at
 
 
 def test_an_upload_and_task_in_the_same_session_round_trips(client):
     """The path an operator actually walks: upload, then create a task."""
+    session_id = client.post("/api/sessions").json()["session_id"]
     up = client.post(
         "/api/upload",
         files={"file": ("scan.pdf", b"%PDF-1.4 x", "application/pdf")},
-        data={"session_id": "session_A"},
+        data={"session_id": session_id},
     )
     rel = up.json()["path"]
 
     created = client.post(
         "/api/tasks",
-        json={"text": "draft an approval note", "session_id": "session_A",
+        json={"text": "draft an approval note", "session_id": session_id,
               "file_paths": [rel], "scenario": "flagship"},
     )
 
@@ -368,18 +370,64 @@ def test_an_upload_and_task_in_the_same_session_round_trips(client):
 
 
 def test_a_cross_session_task_creation_is_a_400_over_http(client):
+    session_a = client.post("/api/sessions").json()["session_id"]
     up = client.post(
         "/api/upload",
         files={"file": ("scan.pdf", b"%PDF-1.4 x", "application/pdf")},
-        data={"session_id": "session_A"},
+        data={"session_id": session_a},
     )
     rel = up.json()["path"]
 
+    session_b = client.post("/api/sessions").json()["session_id"]
+
     created = client.post(
         "/api/tasks",
-        json={"text": "draft an approval note", "session_id": "session_B",
+        json={"text": "draft an approval note", "session_id": session_b,
               "file_paths": [rel], "scenario": "flagship"},
     )
 
     assert created.status_code == 400
     assert "different session" in created.text
+    assert not list((client.app.state.service.settings.workspace / "tasks").glob("*/uploads/*"))
+
+
+def test_anonymous_upload_returns_a_session_that_can_claim_it(client):
+    up = client.post(
+        "/api/upload",
+        files={"file": ("scan.pdf", b"%PDF-1.4 x", "application/pdf")},
+    )
+
+    assert up.status_code == 200
+    body = up.json()
+    assert body["session_id"].startswith("s_")
+    assert "setu_active_session=" in up.headers["set-cookie"]
+
+    created = client.post(
+        "/api/tasks",
+        json={
+            "text": "draft an approval note",
+            "session_id": body["session_id"],
+            "file_paths": [body["path"]],
+            "scenario": "flagship",
+        },
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["session_id"] == body["session_id"]
+
+
+def test_upload_replaces_a_client_invented_session_id(client):
+    up = client.post(
+        "/api/upload",
+        files={"file": ("scan.pdf", b"%PDF-1.4 x", "application/pdf")},
+        data={"session_id": "session_A"},
+    )
+
+    assert up.status_code == 200
+    body = up.json()
+    assert body["session_id"].startswith("s_")
+    assert body["session_id"] != "session_A"
+
+    staged = client.app.state.service.uploads.get(body["path"])
+    assert staged is not None
+    assert staged.session_id == body["session_id"]
