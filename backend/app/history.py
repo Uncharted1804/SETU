@@ -33,10 +33,42 @@ def _title(text: str) -> str:
 
 def _assistant_text(result: TaskResult) -> str:
     """Select the most useful user-facing text without exposing raw traces."""
-    for observation in reversed(result.observations):
-        content = observation.payload.get("content")
-        if isinstance(content, str) and content.strip():
-            return content.strip()
+    code_obs = next(
+        (
+            o
+            for o in reversed(result.observations)
+            if isinstance((o.payload or {}).get("code"), str) and o.payload["code"].strip()
+        ),
+        None,
+    )
+    content_obs = next(
+        (
+            o
+            for o in reversed(result.observations)
+            if isinstance((o.payload or {}).get("content"), str) and o.payload["content"].strip()
+        ),
+        None,
+    )
+    if code_obs and content_obs:
+        content = content_obs.payload["content"].strip()
+        code = code_obs.payload["code"].strip()
+        lang = str(code_obs.payload.get("language") or "python")
+        text = f"{content}\n\n```{lang}\n{code}\n```"
+        stdout = code_obs.payload.get("stdout")
+        if isinstance(stdout, str) and stdout.strip():
+            text += f"\n\n**Output:**\n```text\n{stdout.strip()}\n```"
+        return text
+    if code_obs:
+        code = code_obs.payload["code"].strip()
+        lang = str(code_obs.payload.get("language") or "python")
+        text = f"```{lang}\n{code}\n```"
+        stdout = code_obs.payload.get("stdout")
+        if isinstance(stdout, str) and stdout.strip():
+            text += f"\n\n**Output:**\n```text\n{stdout.strip()}\n```"
+        return text
+    if content_obs:
+        return content_obs.payload["content"].strip()
+
     if result.state == "completed":
         summaries = [o.summary.strip() for o in result.observations if o.summary.strip()]
         return summaries[-1] if summaries else "Task completed."

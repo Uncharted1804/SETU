@@ -265,6 +265,10 @@ class ModelPlanner:
             "  * `args` must match that tool's argument schema.",
             "  * If write_file or docgen content depends on a prior agent step, leave `content`",
             "    empty or use '<content>'; it will automatically be populated from that agent's output.",
+            "  * When an image/document contains or requests code or a programming solution:",
+            "    1. Use 'vision' to extract the problem statement from the image.",
+            "    2. Use 'coding' to write and sandbox-verify the Python solution.",
+            "    3. Use 'write_file' with args={'path': 'solution.py', 'content': '<generated_code>'} to save the code deliverable.",
             "  * `why` is one short sentence shown to a human in an approval",
             "    checklist. Write it for them, not for yourself.",
             "  * Reply with JSON only. No prose, no code fences.",
@@ -309,8 +313,21 @@ class ModelPlanner:
             # document, so it goes in the DATA region, never the instruction
             # region. Otherwise a sentence inside a PDF could rewrite the plan -
             # the exact attack security/injection.py exists to blunt.
+            obs_text = obs.summary or ""
+            if obs.target == "vision" and obs.payload:
+                raw = obs.payload.get("raw_text")
+                if raw and isinstance(raw, str) and raw.strip():
+                    obs_text += "\nExtracted content:\n" + raw.strip()[:1200]
+                elif obs.payload.get("findings"):
+                    f_texts = [
+                        f.get("text", "")
+                        for f in obs.payload["findings"]
+                        if isinstance(f, dict) and f.get("text")
+                    ]
+                    if f_texts:
+                        obs_text += "\nExtracted content:\n" + "\n".join(f_texts)[:1200]
             lines.append(
-                wrap_untrusted("observation-step-%d" % obs.step_n, obs.summary or "")
+                wrap_untrusted("observation-step-%d" % obs.step_n, obs_text)
             )
         lines += [
             "",

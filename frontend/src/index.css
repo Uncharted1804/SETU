@@ -245,6 +245,147 @@ summary::-webkit-details-marker { display: none; }
 .user-bubble { max-width: 80%; border-radius: var(--radius-lg); background: var(--bubble); padding: var(--space-3) var(--space-4); }
 .user-bubble p { margin: 0; color: rgb(var(--setu-content)); font-size: var(--text-base); line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
 .assistant-turn > p { margin: 0; color: rgb(var(--setu-content)); font-size: var(--text-base); line-height: 1.7; overflow-wrap: anywhere; white-space: pre-wrap; }
+.assistant-content { width: 100%; }
+.assistant-turn p.assistant-p { margin: 0 0 var(--space-3); color: rgb(var(--setu-content)); font-size: var(--text-base); line-height: 1.7; overflow-wrap: anywhere; }
+.assistant-p:last-child { margin-bottom: 0; }
+
+.inline-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875em;
+  padding: 0.15rem 0.35rem;
+  border-radius: var(--radius-sm);
+  background: rgb(var(--setu-edge) / .7);
+  color: rgb(var(--setu-accent));
+}
+
+/* Chat copyable code box (ChatGPT / Gemini style) */
+.chat-code-block {
+  margin: var(--space-3) 0 var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid rgb(var(--setu-edge));
+  background: #0d1117;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.chat-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background: #161b22;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.code-lang-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: #8b949e;
+  text-transform: lowercase;
+}
+
+.code-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.code-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-medium);
+  color: #c9d1d9;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.code-action-btn svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.code-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.code-action-btn.copied {
+  color: #3fb950;
+  border-color: rgba(63, 185, 80, 0.4);
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.chat-code-body {
+  padding: var(--space-3) var(--space-4);
+  overflow-x: auto;
+}
+
+.chat-code-body pre {
+  margin: 0;
+  padding: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: var(--text-sm);
+  line-height: 1.65;
+  color: #e6edf3;
+  white-space: pre;
+}
+
+/* Turn artifact pills */
+.turn-artifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.turn-artifact-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid rgb(var(--setu-edge));
+  background: var(--paper);
+  color: rgb(var(--setu-content));
+  font-size: var(--text-xs);
+  text-decoration: none;
+  transition: all var(--dur-fast) var(--ease);
+  box-shadow: var(--shadow-sm);
+}
+
+.turn-artifact-pill svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: rgb(var(--setu-muted));
+}
+
+.turn-artifact-pill:hover {
+  border-color: rgb(var(--setu-accent));
+  color: rgb(var(--setu-accent));
+  transform: translateY(-1px);
+}
+
+.turn-artifact-pill:hover svg {
+  color: rgb(var(--setu-accent));
+}
+
+.artifact-pill-name {
+  font-weight: var(--font-medium);
+}
+
+.artifact-pill-size {
+  color: rgb(var(--setu-muted));
+  font-size: var(--text-2xs);
+}
 .inline-files { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .inline-files li { border-radius: var(--radius-sm); background: rgb(var(--setu-edge) / .6); padding: .15rem var(--space-2); color: rgb(var(--setu-muted)); font-size: var(--text-2xs); }
 

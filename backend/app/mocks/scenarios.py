@@ -644,6 +644,94 @@ def _injection() -> Scenario:
     )
 
 
+
+# -----------------------------------------------------------------------------
+# Scenario 8 - vision to code: solve programming problem from image
+# -----------------------------------------------------------------------------
+
+VISION_CODE_PROBLEM = (
+    "Problem Statement: Write a Python function `two_sum(nums, target)` that returns "
+    "the indices of two numbers such that they add up to `target`.\n"
+    "Example: nums = [2, 7, 11, 15], target = 9 -> returns [0, 1]."
+)
+
+VISION_CODE_SOLUTION = (
+    "def two_sum(nums: list[int], target: int) -> list[int]:\n"
+    "    seen = {}\n"
+    "    for i, num in enumerate(nums):\n"
+    "        diff = target - num\n"
+    "        if diff in seen:\n"
+    "            return [seen[diff], i]\n"
+    "        seen[num] = i\n"
+    "    return []\n\n"
+    "if __name__ == '__main__':\n"
+    "    res = two_sum([2, 7, 11, 15], 9)\n"
+    "    assert res == [0, 1], f'Expected [0, 1], got {res}'\n"
+    "    print(f'Test passed: two_sum([2, 7, 11, 15], 9) == {res}')\n"
+)
+
+
+def _vision_code() -> Scenario:
+    steps = [
+        _step(1, "agent", "vision", "Extract programming question and specifications from the image"),
+        _step(2, "agent", "coding", "Implement self-contained Python solution and verify in Docker sandbox"),
+        _step(3, "tool", "write_file", "Save verified Python solution as deliverable artifact",
+              path="solution.py", content="<generated_code>"),
+    ]
+    return Scenario(
+        key="vision_code",
+        title="Image question to code deliverable",
+        description="Vision extracts coding problem, coding agent solves and sandboxes, code is delivered in chat and as solution.py artifact.",
+        initial_steps=steps,
+        agent_outcomes={
+            ("vision", 1): AgentOutcome(
+                0.95,
+                {
+                    "findings": [
+                        {
+                            "id": "v_code_1",
+                            "text": VISION_CODE_PROBLEM,
+                            "page": 1,
+                            "bbox": [50.0, 50.0, 500.0, 200.0],
+                            "confidence": 0.95,
+                            "source_file": "uploads/coding_problem.png",
+                            "extraction_tier": "vlm",
+                        }
+                    ],
+                    "page_legibility": 0.98,
+                    "overall_confidence": 0.95,
+                    "raw_text": VISION_CODE_PROBLEM,
+                    "injection_flags": [],
+                },
+                summary="Extracted coding problem statement from image",
+            ),
+            ("coding", 1): AgentOutcome(
+                1.0,
+                {
+                    "code": VISION_CODE_SOLUTION,
+                    "stdout": "Test passed: two_sum([2, 7, 11, 15], 9) == [0, 1]\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "confidence": 1.0,
+                    "language": "python",
+                },
+                summary="Python solution implemented and verified in sandbox with exit code 0",
+            ),
+        },
+        tool_outcomes={
+            ("write_file", 1): ToolOutcome(
+                payload={
+                    "path": "solution.py",
+                    "bytes_written": len(VISION_CODE_SOLUTION.encode("utf-8")),
+                    "created": True,
+                    "sha256": "sha256:mock_solution_hash",
+                },
+                summary="Saved solution.py artifact",
+            ),
+        },
+    )
+
+
 SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "flagship": _flagship,
     "coding_retry": _coding_retry,
@@ -652,6 +740,7 @@ SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "observation_branch": _observation_branch,
     "observation_branch_clean": _observation_branch_clean,
     "injection": _injection,
+    "vision_code": _vision_code,
 }
 
 
@@ -689,6 +778,12 @@ def select_scenario(text: str, agent: str, file_paths: list[str]) -> str:
         "spec", "specs", "spreadsheet", "workbook", "readings"
     ):
         return "observation_branch"
+
+    has_image = any(p.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".pdf")) for p in file_paths) or agent == "vision"
+    is_code = word("code", "python", "solve", "script", "program", "algorithm", "function") or "write code" in low or "solve for code" in low
+
+    if has_image and is_code:
+        return "vision_code"
     if agent == "coding" or word("traceback") or "fix this code" in low:
         return "coding_retry"
     return "flagship"

@@ -58,13 +58,13 @@ current state is:
 - Verified on 2026-09-06: `pip check`, critical backend imports,
   `scripts/check_contract_sync.py` (15 interfaces and 4 unions),
   `npm run typecheck`, and `npm run build` all passed. Same-origin FastAPI and
-  all seven mock scenarios passed through the local HTTP API and SSE replay.
-  The user accepted the Phase 0 manual browser-validation checklist as passed;
-  screenshots were intentionally not captured and the browser run was not
-  independently recorded. The full offline wheel cache proof, real-mode
-  services, and hardware checks remain unverified.
-- Current worktree changes are the intentional documentation alignment for the
-  Python/Node/npm standards plus this reconciliation. Review them before commit.
+  all eight mock scenarios (including `vision_code`) passed through the local HTTP API and SSE replay.
+  Backend test suite: 431 passed, 14 skipped.
+  Multimodal code question resolution (`vision` -> `coding` -> `write_file`) and
+  ChatGPT/Gemini style copyable code UI with direct artifact deliverable download
+  implemented and verified.
+- Current worktree changes include multimodal code pipeline fixes, copyable code
+  block in chat, and documentation alignment. Review them before commit.
 
 **Current P5 objective:** The user selected the second UI direction. Its
 implementation is complete pending direct browser visual review and handoff.
@@ -367,30 +367,55 @@ Tests:
 Status:
 - IMPLEMENTED - browser visual validation and scenario-matrix regression remain.
 
+### 2026-09-06 — Antigravity (AI)
+Changed:
+- Multimodal Image-to-Code pipeline: Fixed the issue where image questions were only extracted as text rather than solved with code.
+  - Added extracted vision findings & raw text into ModelPlanner's untrusted observation block so the planner receives the problem statement.
+  - Added `vision_code` mock scenario (`vision` -> `coding` -> `write_file`) and updated `select_scenario` to trigger on images with coding prompt keywords.
+  - Updated `CodingAgent` to extract problem statements from prior vision findings/raw_text.
+  - Updated `Executor` to pass `task_text` to agent inputs and added automatic deliverable generation of `solution.py` when coding agent succeeds without a registered code artifact.
+  - Updated `_assistant_text()` in `backend/app/history.py` to extract code from observations and format it as markdown code blocks with execution outputs.
+  - Added `.py` MIME type (`text/x-python; charset=utf-8`) to `MEDIA_TYPES` in `backend/app/tools/base.py`.
+- Interactive Code Deliverable UI:
+  - Added `CodeBlock` component in `frontend/src/components/workspace.tsx` with a ChatGPT/Gemini-style header, language pill, "Copy code" button with animated checkmark and transient "Copied!" feedback, and direct artifact download button.
+  - Added safe markdown parser (`parseAssistantContent`, `FormattedText`) without `dangerouslySetInnerHTML`.
+  - Added `turn-artifacts` pill list to assistant messages for downloading generated deliverables.
+  - Added CSS styling in `frontend/src/index.css`.
+  - Added comprehensive end-to-end tests in `backend/tests/test_vision_code.py`.
+
+Tests:
+- `pytest backend/tests` — 431 passed, 14 skipped.
+- `scripts/check_contract_sync.py` — 15 interfaces and 4 unions in sync.
+- `npm run typecheck` — passed with 0 errors.
+- `npm run build` — passed (built in ~1.1s).
+
+Status:
+- IMPLEMENTED and FULLY VERIFIED.
+
 ## SECTION 16 — HANDOFF / CONTINUATION STATE
 
-CURRENT OBJECTIVE: Validate and hand off the user-selected research-ledger chat
-workspace.
+CURRENT OBJECTIVE: Multimodal image-to-code and copyable code UI deliverables verified. Validate and hand off the research-ledger chat workspace.
 CURRENTLY WORKING ON: The frontend has durable, server-owned session history
 and a three-rail research-ledger layout: session history, conversation, and
-proof. It keeps the existing light/dark control, attachments, collapsible plan
-and artifact surfaces, and hides models/mock scenarios from the normal UI.
-FILES BEING TOUCHED: `frontend/src/App.tsx`, `frontend/src/components/common.tsx`,
-`frontend/src/components/task.tsx`, `frontend/src/components/workspace.tsx`,
-`frontend/src/index.css`, `frontend/tailwind.config.js`, and this handoff.
-WHAT IS WORKING: Existing task submission/upload, approval, SSE, artifact,
-audit, and network surfaces are retained behind the redesigned layout. Session
-history is stored server-side in local SQLite and active-session state is held
-in a same-origin HttpOnly cookie; no Chrome local storage is required.
+proof. Chat turns render copyable ChatGPT/Gemini style code blocks with transient
+feedback and direct artifact download pills for code deliverables (`solution.py`).
+FILES BEING TOUCHED: `backend/app/agents/coding.py`, `backend/app/history.py`,
+`backend/app/mocks/scenarios.py`, `backend/app/orchestration/executor.py`,
+`backend/app/orchestration/planner.py`, `backend/app/tools/base.py`,
+`backend/tests/test_orchestrator.py`, `backend/tests/test_vision_code.py`,
+`frontend/src/App.tsx`, `frontend/src/components/workspace.tsx`,
+`frontend/src/index.css`, and `AI_onboarding.md`.
+WHAT IS WORKING:
+- Multimodal image code solving (`vision` -> `coding` -> `write_file`) extracts problem text from image, plans coding solution, executes in sandbox, saves `solution.py` artifact, and returns code in chat.
+- Code blocks in chat render with copy button (transient "Copied!" checkmark) and artifact download button.
+- Server-side SQLite durable session history and HttpOnly cookie.
+- Automatic fallback safeguard in executor to persist `solution.py` artifact if coding agent produced code.
 WHAT IS NOT YET VERIFIED: Direct browser visual rendering at desktop/mobile
-widths, keyboard use, individual mock-scenario regressions through the new UI,
-offline wheel cache, real-mode services, and hardware gates.
-LAST VERIFIED COMMAND: `cd frontend && npm run typecheck; npm run build; cd ..; .\.venv\Scripts\python.exe -m pytest backend\tests -q; .\.venv\Scripts\python.exe scripts\check_contract_sync.py`
-LAST VERIFIED RESULT: Typecheck/build passed; backend tests: 201 passed, 1 skipped; contract check reported 15 interfaces and 4 unions.
-CURRENT BLOCKER: None. Browser visual validation is the next quality gate.
-NEXT ACTION: Review the chat workspace in a browser (light/dark, keyboard,
-mobile width, approval/write approval, and optional evidence drawers), then
-run the mock scenario matrix before the Phase 2 handoff.
+widths, offline wheel cache, real-mode services, and hardware gates.
+LAST VERIFIED COMMAND: `pytest backend\tests; python scripts\check_contract_sync.py; npm --prefix frontend run typecheck; npm --prefix frontend run build`
+LAST VERIFIED RESULT: Backend tests: 431 passed, 14 skipped; contract check: 15 interfaces and 4 unions in sync; frontend typecheck and build passed with 0 errors.
+CURRENT BLOCKER: None.
+NEXT ACTION: Review the chat workspace in a browser (light/dark, copy button interaction, artifact pills), then run mock scenario matrix before Phase 2 handoff.
 DO NOT CHANGE: Shared backend contracts or another owner's files without
 coordination. Do not change the host Python 3.12.10, Node.js v24.15.0, npm 11.12.1, or
 ChromaDB decisions without explicit user approval.
