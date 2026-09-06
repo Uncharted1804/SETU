@@ -121,7 +121,12 @@ def _real_specs(settings: Settings) -> list[ToolSpec]:
 
     async def _run_python(args, ctx: ToolContext) -> dict:
         out = await run_in_sandbox(
-            args.code, ctx.settings, timeout_s=args.timeout, input_paths=args.input_paths
+            args.code, ctx.settings, timeout_s=args.timeout,
+            input_paths=args.input_paths,
+            # The per-task root. Without this the sandbox resolves input_paths
+            # against the shared workspace, so one task could mount another's
+            # files by naming them.
+            workspace_root=ctx.workspace,
         )
         return out.model_dump()
 

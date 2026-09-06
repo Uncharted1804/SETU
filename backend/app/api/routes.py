@@ -264,21 +264,27 @@ async def list_artifacts(request: Request, task_id: str):
 
 @router.get("/tasks/{task_id}/artifacts/{artifact_id}")
 async def download_artifact(request: Request, task_id: str, artifact_id: str):
-    """Task-scoped lookup by opaque id.  A client never supplies a path."""
+    """Task-scoped lookup by opaque id.  A client never supplies a path.
+
+    Resolution is against THIS TASK's root, not the shared workspace, because
+    `ToolContext.register_artifact` records `ref.path` relative to the task
+    root. Resolving against the workspace would look up the wrong file, and
+    would also mean a path recorded by one task could be reached while serving
+    another.
+    """
     service = _svc(request)
     ref = service.store.artifact(task_id, artifact_id)
     if ref is None:
         raise HTTPException(status_code=404, detail="no such artifact for this task")
     try:
-        path = service.settings.workspace / ref.path
         from ..security.paths import jail
+        from ..tools.base import task_root
 
-        resolved = jail(ref.path, service.settings.workspace)
+        resolved = jail(ref.path, task_root(service.settings.workspace, task_id))
     except PathEscape as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if not resolved.is_file():
         raise HTTPException(status_code=410, detail="artifact is no longer on disk")
-    _ = path
     return FileResponse(str(resolved), media_type=ref.media_type, filename=ref.name)
 
 
@@ -294,6 +300,11 @@ async def upload(request: Request, file: UploadFile = File(...), session_id: Opt
     The client's filename is sanitised and prefixed; it is never used as a path
     component, so an upload called "../../evil.txt" cannot escape - and the jail
     call below is the second line of defence, not the first.
+
+    This is a STAGING area, shared across sessions and outside any task root.
+    The file is not usable until a task claims it: `create_task` copies it into
+    that task's own root and rewrites the path. Ownership is recorded here so
+    that claim can be refused.
     """
     service = _svc(request)
     raw = await file.read(MAX_UPLOAD_BYTES + 1)
@@ -310,6 +321,10 @@ async def upload(request: Request, file: UploadFile = File(...), session_id: Opt
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(raw)
+    # Record who staged this. create_task refuses a file_paths entry that was
+    # never staged or was staged by another session, so this is the point at
+    # which session_id stops being decorative.
+    service.uploads.stage(rel, session_id)
     return {
         "path": rel,
         "original_name": file.filename,

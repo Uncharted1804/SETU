@@ -176,6 +176,51 @@ def test_sse_replays_route_and_plan_for_a_late_subscriber(client):
     assert types[-1] == "done"
 
 
+def test_a_terminal_state_is_never_visible_before_its_done_event(client):
+    """The _finalise() ordering guard, asserted directly rather than via SSE.
+
+    `test_sse_replays_route_and_plan_for_a_late_subscriber` only catches this
+    intermittently, because _sse_events() then WAITS for `done` and usually
+    receives it a moment later. This checks the invariant itself: at the instant
+    GET /api/tasks/{id} first reports a terminal state, the "done" event must
+    already be in replay history.
+
+    Before the fix this failed on every run measured here (12 of 12 at natural
+    timing), with history ending at "step_done" - which is exactly the value P6
+    saw in the assertion failure. Anything that snapshots history at that
+    moment, or whose stream ends before the live `done` arrives, sees a task
+    that finished without a `done` event.
+    """
+    created = client.post(
+        "/api/tasks", json={"text": "read this degraded scan", "scenario": "escalation"}
+    )
+    task_id = created.json()["task_id"]
+    bus = client.app.state.service.bus
+
+    for _ in range(400):
+        status = client.get("/api/tasks/%s" % task_id).json()
+        pending = status.get("pending_approval")
+        if pending and not pending["decided"]:
+            client.post(
+                "/api/tasks/%s/approve" % task_id,
+                json={"approval_id": pending["approval_id"], "approved": True},
+            )
+        if status["state"] in {"completed", "needs_human_review", "failed", "rejected"}:
+            history = [e.type for e in bus.stream(task_id).history()]
+            assert "done" in history, (
+                "state %r was visible while replay history still ended at %r; "
+                "record.set_state() must happen after the terminal emits"
+                % (status["state"], history[-1] if history else "<empty>")
+            )
+            assert history[-1] == "done", (
+                "the last event must be `done`, got %r - an event emitted after "
+                "it (an `audit` entry, say) breaks the same invariant" % history[-1]
+            )
+            return
+
+    raise AssertionError("task never reached a terminal state")
+
+
 def test_sse_event_ids_are_monotonic(client):
     created = client.post(
         "/api/tasks", json={"text": "read this degraded scan", "scenario": "escalation"}

@@ -45,6 +45,36 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
+def _force_put(queue: "asyncio.Queue[Optional[Event]]", item: "Optional[Event]") -> None:
+    """Enqueue something that must not be dropped, evicting to make room.
+
+    Ordinary events may fall on the floor when a subscriber is too far behind:
+    history is the authoritative record, and a client resumes with
+    Last-Event-ID to collect what it missed. Two things are different in kind
+    and are pushed through here instead:
+
+      * the `done` EVENT, because it carries the task result and is what the
+        UI ends on; and
+      * the None sentinel, because it is the only thing that tells a subscriber
+        parked on `queue.get()` that the stream is over. Dropping it is a hang,
+        not a dropped frame.
+
+    A subscriber that is already QUEUE_LIMIT events behind can recover any
+    evicted event from history; it cannot recover either of these. The loop
+    terminates because put_nowait/get_nowait never yield, so nothing can refill
+    the queue while it runs.
+    """
+    while True:
+        try:
+            queue.put_nowait(item)
+            return
+        except asyncio.QueueFull:
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:  # drained concurrently; the next put fits
+                continue
+
+
 class TaskEventStream:
     """One task's event history plus its live subscribers."""
 
@@ -66,19 +96,25 @@ class TaskEventStream:
         self._seq += 1
         event = Event(type=type_, data=data, seq=self._seq, ts=_now())
         self._history.append(event)
+        # `done` is delivered even to a subscriber that is too far behind to
+        # take anything else: it carries the result and ends the stream.
+        # Everything else may be dropped rather than blocking the executor on a
+        # slow browser - history plus Last-Event-ID is the recovery path.
+        terminal = type_ == "done"
         for queue in list(self._subscribers):
-            try:
-                queue.put_nowait(event)
-            except asyncio.QueueFull:
-                # Never block the executor on a slow browser.
-                pass
-        if type_ == "done":
-            self._closed = True
-            for queue in list(self._subscribers):
+            if terminal:
+                _force_put(queue, event)
+            else:
                 try:
-                    queue.put_nowait(None)  # sentinel: end of stream
+                    queue.put_nowait(event)
                 except asyncio.QueueFull:
                     pass
+        if terminal:
+            # Set before the sentinel goes out, so a subscriber that wakes on
+            # it and re-checks `closed` cannot see a stale False.
+            self._closed = True
+            for queue in list(self._subscribers):
+                _force_put(queue, None)  # sentinel: end of stream
         return event
 
     async def subscribe(self, last_event_id: int = 0) -> AsyncIterator[Event]:
@@ -86,10 +122,23 @@ class TaskEventStream:
         queue: asyncio.Queue[Optional[Event]] = asyncio.Queue(maxsize=QUEUE_LIMIT)
         self._subscribers.add(queue)
         try:
+            # Replay until history has nothing newer, NOT once. Each `yield`
+            # suspends this generator, and the executor keeps emitting while it
+            # is suspended, so a single pass over a snapshot taken at the start
+            # can finish already stale. Re-reading is what makes the handover
+            # from replay to live delivery gapless.
             replayed_to = last_event_id
-            for event in self.history(after_seq=last_event_id):
-                replayed_to = event.seq
-                yield event
+            while True:
+                pending = self.history(after_seq=replayed_to)
+                if not pending:
+                    break
+                for event in pending:
+                    replayed_to = event.seq
+                    yield event
+
+            # Only now is "closed" safe to act on. Checking it straight after a
+            # single replay pass abandoned every event that arrived during that
+            # pass - including `done` itself, which is what closed the stream.
             if self._closed:
                 return
             while True:

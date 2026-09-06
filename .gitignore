@@ -20,6 +20,7 @@ pip-wheel-metadata/
 
 # Virtual Environments
 .venv/
+.venv*/
 venv/
 env/
 ENV/
@@ -148,3 +149,11 @@ $RECYCLE.BIN/
 graphify-out/
 .graphify/
 graphify/
+
+# ---- Credentials and Intermediates ----
+credentials.json
+token.json
+P2_VISION_GUIDE.md
+*_crop.png
+*_pre.png
+
