@@ -76,6 +76,23 @@ CODE_SIGNALS: tuple[str, ...] = (
     "script",
     "compute",
     "calculate",
+    # Language / deliverable names a request names directly - the gap that let
+    # "give me a python file that prints X" fall through to the R0_DEFAULT
+    # reasoning path instead of the coding agent.
+    "python",
+    "javascript",
+    "typescript",
+    "java program",
+    "c++",
+    "algorithm",
+    "leetcode",
+    "regex",
+    "sql query",
+    "write a program",
+    "write a script",
+    "coding problem",
+    "code snippet",
+    "print(",
 )
 
 DOC_SIGNALS: tuple[str, ...] = (
