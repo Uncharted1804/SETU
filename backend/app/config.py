@@ -64,34 +64,42 @@ VISION_EXTS: frozenset[str] = frozenset(
 #: Extensions that indicate spreadsheet work.
 SHEET_EXTS: frozenset[str] = frozenset({"xlsx", "xls", "csv", "xlsm"})
 
+#: Matched via router._first_signal: a bare word/phrase on word boundaries, a
+#: punctuation-bearing one (".py", "c++") as a literal substring. Deliberately
+#: general rather than an ever-growing list of exact phrases - "code",
+#: "program" and "coding" alone catch "write a C code", "java program",
+#: "coding problem", etc. without a separate entry per wording.
 CODE_SIGNALS: tuple[str, ...] = (
+    "code",
+    "coding",
+    "program",
     "def ",
     "function",
     "traceback",
     "error:",
     ".py",
     "debug",
-    "fix this code",
     "stack trace",
     "script",
     "compute",
     "calculate",
-    # Language / deliverable names a request names directly - the gap that let
-    # "give me a python file that prints X" fall through to the R0_DEFAULT
-    # reasoning path instead of the coding agent.
-    "python",
-    "javascript",
-    "typescript",
-    "java program",
-    "c++",
+    "implement",
     "algorithm",
     "leetcode",
     "regex",
+    "python",
+    "javascript",
+    "typescript",
+    "golang",
+    "rust",
+    "kotlin",
+    "swift",
+    "ruby",
+    "php",
+    "java",
+    "c++",
+    "c#",
     "sql query",
-    "write a program",
-    "write a script",
-    "coding problem",
-    "code snippet",
     "print(",
 )
 

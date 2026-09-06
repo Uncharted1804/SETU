@@ -114,12 +114,63 @@ def test_coding_task_auto_creates_solution_artifact_if_not_explicitly_written(cl
     assert any(a["name"] == "solution.py" for a in artifacts), "solution.py was not registered"
 
 
-def test_select_scenario_handles_add_two_numbers_and_empty_prompt():
+def test_select_scenario_handles_generic_coding_questions_and_numbered_problems():
+    # Various LeetCode-style numbered titles and algorithms
     assert select_scenario("2. Add Two Numbers", "vision", ["uploads/leetcode2.png"]) == "vision_code"
-    assert select_scenario("Add Two Numbers", "vision", ["uploads/leetcode2.png"]) == "vision_code"
-    assert select_scenario("", "vision", ["uploads/leetcode2.png"]) == "vision_code"
+    assert select_scenario("206. Reverse Linked List", "vision", ["problem.png"]) == "vision_code"
+    assert select_scenario("704. Binary Search", "vision", ["search.jpg"]) == "vision_code"
+    assert select_scenario("509. Fibonacci Number", "vision", ["fib.png"]) == "vision_code"
+    assert select_scenario("1. Two Sum", "vision", ["two_sum.png"]) == "vision_code"
+    assert select_scenario("Invert Binary Tree", "vision", ["tree.png"]) == "vision_code"
     assert select_scenario("solve", "vision", ["uploads/question.png"]) == "vision_code"
-    assert select_scenario("leetcode problem", "vision", ["uploads/problem.png"]) == "vision_code"
+    assert select_scenario("", "vision", ["uploads/problem.png"]) == "vision_code"
+    assert select_scenario("implement a graph traversal algorithm", "vision", ["graph.png"]) == "vision_code"
+    assert select_scenario("write a function to find the maximum subarray", "vision", ["array.png"]) == "vision_code"
+
+    # Inspection reports still route to flagship
+    assert select_scenario("Review the hydrotest inspection report", "vision", ["report.pdf"]) == "flagship"
+    assert select_scenario("inspect this report and check weld", "vision", ["report.pdf"]) == "flagship"
+
+
+def test_generate_mock_code_solution_synthesizes_runnable_code():
+    from app.mocks.scenarios import generate_mock_code_solution
+
+    # 1. Reverse linked list
+    sol_ll = generate_mock_code_solution("reverse a linked list", "")
+    assert "class ListNode" in sol_ll["code"]
+    assert "def reverse_list" in sol_ll["code"]
+    # Verify code executes cleanly without exception
+    loc = {}
+    exec(sol_ll["code"], loc, loc)
+    assert loc["reverse_list"] is not None
+
+    # 2. Binary search
+    sol_bs = generate_mock_code_solution("binary search algorithm", "")
+    assert "def binary_search" in sol_bs["code"]
+    loc_bs = {}
+    exec(sol_bs["code"], loc_bs, loc_bs)
+    assert loc_bs["binary_search"]([-1, 0, 3, 5, 9, 12], 9) == 4
+
+    # 3. Fibonacci
+    sol_fib = generate_mock_code_solution("fibonacci sequence", "")
+    assert "def fibonacci" in sol_fib["code"]
+    loc_fib = {}
+    exec(sol_fib["code"], loc_fib, loc_fib)
+    assert loc_fib["fibonacci"](10) == 55
+
+    # 4. Binary tree
+    sol_tree = generate_mock_code_solution("invert a binary tree", "")
+    assert "class TreeNode" in sol_tree["code"]
+    assert "def invert_tree" in sol_tree["code"]
+    loc_tree = {}
+    exec(sol_tree["code"], loc_tree, loc_tree)
+
+    # 5. Default / Add Two Numbers & Two Sum
+    sol_def = generate_mock_code_solution("", "")
+    assert "def add_two_numbers" in sol_def["code"]
+    assert "def two_sum" in sol_def["code"]
+    loc_def = {}
+    exec(sol_def["code"], loc_def, loc_def)
 
 
 def test_format_findings_text_groups_words_by_line():
@@ -185,3 +236,60 @@ def test_resolve_tool_placeholders_never_writes_raw_text_to_py_files():
     # Must NOT have resolved to raw_text!
     assert step.args["content"] != "2.\nAdd\nTwo\nNumbers"
     assert step.args["content"] == "<generated_code>"
+
+
+def test_vision_code_end_to_end_with_dynamic_reverse_linked_list(client):
+    upload_resp = client.post(
+        "/api/upload",
+        files={"file": ("problem.png", b"\x89PNG\r\n\x1a\nvalid_png_content", "image/png")},
+    )
+    assert upload_resp.status_code == 200
+    uploaded_path = upload_resp.json()["path"]
+
+    created = client.post(
+        "/api/tasks",
+        json={
+            "text": "write python code to reverse a linked list from this problem image",
+            "file_paths": [uploaded_path],
+        },
+    )
+    assert created.status_code == 201
+    task_id = created.json()["task_id"]
+
+    import time
+    seen_done = False
+    for _ in range(400):
+        status = client.get("/api/tasks/%s" % task_id).json()
+        pending = status.get("pending_approval")
+        if pending and not pending["decided"]:
+            r = client.post(
+                "/api/tasks/%s/approve" % task_id,
+                json={"approval_id": pending["approval_id"], "approved": True},
+            )
+            assert r.status_code == 200
+        if status["state"] in {"completed", "failed", "rejected", "needs_human_review"}:
+            seen_done = True
+            break
+        time.sleep(0.01)
+    assert seen_done
+
+    status = client.get("/api/tasks/%s" % task_id).json()
+    assert status["state"] == "completed"
+
+    # Verify solution.py artifact contains reverse_list
+    artifacts = client.get("/api/tasks/%s/artifacts" % task_id).json()
+    py_artifact = next((a for a in artifacts if a["name"] == "solution.py"), None)
+    assert py_artifact is not None
+    download = client.get("/api/tasks/%s/artifacts/%s" % (task_id, py_artifact["artifact_id"]))
+    code_text = download.content.decode("utf-8")
+    assert "def reverse_list" in code_text
+    assert "class ListNode" in code_text
+
+    # Verify chat turn contains copyable block with reverse_list
+    session = client.get("/api/sessions/current").json()
+    turn = next((t for t in session["turns"] if t["task_id"] == task_id), None)
+    assert turn is not None
+    assert "```python" in turn["assistant_text"]
+    assert "def reverse_list" in turn["assistant_text"]
+
+

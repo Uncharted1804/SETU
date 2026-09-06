@@ -77,6 +77,45 @@ class MockAgent:
         payload = dict(outcome.payload)
         payload.setdefault("_summary", outcome.summary)
         payload["simulated"] = True
+
+        if scenario.key == "vision_code":
+            from .scenarios import generate_mock_code_solution
+            task_text = str((inv.inputs or {}).get("task_text") or "")
+            prior = (inv.inputs or {}).get("prior") or []
+            problem_text = ""
+            for p in prior:
+                if isinstance(p, dict) and p.get("target") == "vision":
+                    pl = p.get("payload") or {}
+                    problem_text = str(pl.get("raw_text") or "")
+                    if not problem_text and pl.get("findings"):
+                        problem_text = "\n".join(
+                            str(f.get("text", "")) for f in pl["findings"] if isinstance(f, dict)
+                        )
+                    if problem_text:
+                        break
+
+            if self.name == "vision":
+                # If a specific programming problem was requested in task_text, reflect it in vision findings
+                if task_text and task_text.strip() and not any(
+                    w in task_text.lower() for w in ["solve this", "solve for code"]
+                ):
+                    custom_problem = task_text.strip()
+                    payload["raw_text"] = custom_problem
+                    if payload.get("findings") and isinstance(payload["findings"], list) and len(payload["findings"]) > 0:
+                        f0 = dict(payload["findings"][0])
+                        f0["text"] = custom_problem
+                        payload["findings"] = [f0]
+            elif self.name == "coding":
+                # Dynamically generate solution tailored to the actual problem
+                gen = generate_mock_code_solution(task_text, problem_text)
+                payload["code"] = gen["code"]
+                payload["stdout"] = gen["stdout"]
+                payload["exit_code"] = 0
+                payload["confidence"] = 1.0
+                payload["_summary"] = gen.get(
+                    "summary", "Python solution implemented and verified in sandbox with exit code 0"
+                )
+
         return AgentResult(
             agent=self.name,  # type: ignore[arg-type]
             model=inv.model,

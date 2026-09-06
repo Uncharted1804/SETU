@@ -500,16 +500,24 @@ class ModelPlanner:
             for p in (task.file_paths or [])
         )
         user_text = (task.text or "").lower()
+        is_inspection = any(
+            w in user_text
+            for w in [
+                "hydrotest", "inspection", "approval note", "weld", "ndt",
+                "safety circular", "sop-114", "deviation", "holding period"
+            ]
+        )
         code_keywords = {
-            "code", "python", "solve", "solution", "implement", "algorithm",
-            "function", "program", "script", "leetcode", "problem", "question",
-            "numbers", "add two", "two numbers", "debug", "fix", "write",
-            "class", "def", "array", "linked list", "test", "numbers", "add"
+            "code", "coding", "python", "solve", "solution", "implement", "implementation",
+            "algorithm", "function", "program", "programming", "script",
+            "leetcode", "hackerrank", "codeforces", "codewars", "problem", "question",
+            "challenge", "exercise", "debug", "fix", "write", "class", "def", "return",
+            "array", "linked list", "tree", "binary", "graph", "hash", "node", "pointer",
+            "stack", "queue", "matrix", "grid", "recursion", "complexity", "test", "run"
         }
-        is_code_intent = (
+        is_code_intent = not is_inspection and (
             any(w in user_text for w in code_keywords)
             or not user_text.strip()
-            or len(user_text.strip()) < 30
         )
 
         if (has_vision or has_image) and is_code_intent and not has_coding:
@@ -593,8 +601,9 @@ class ModelPlanner:
                         raw = str((o.payload or {}).get("raw_text") or "").lower()
                         code_signals = [
                             "input:", "output:", "linked list", "integer", "def ", "class ",
-                            "return ", "constraints", "leetcode", "function", "algorithm",
-                            "two numbers", "add two", "array", "nums =", "target ="
+                            "return ", "constraints", "leetcode", "hackerrank", "function",
+                            "algorithm", "array", "tree", "node", "pointer", "example",
+                            "complexity", "given an array", "given a string", "given two"
                         ]
                         if any(sig in raw for sig in code_signals):
                             coding_step = PlanStep(

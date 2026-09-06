@@ -32,6 +32,7 @@ reported as `matched_signal`, so the decision is reproducible from the request.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Optional
 
@@ -41,6 +42,28 @@ from .contracts import RouterDecision, TaskEnvelope
 
 def _ext(path: str) -> str:
     return path.rsplit(".", 1)[-1].lower() if "." in path else ""
+
+
+def _first_signal(text: str, signals: tuple[str, ...]) -> Optional[str]:
+    """First signal (in order) present in `text`, or None.
+
+    A plain word/phrase ("code", "write a program") is matched on word
+    boundaries so it fires on "write a c code" without also firing on
+    "encode"/"decode"/"programme". A signal carrying punctuation (".py",
+    "c++", "c#", "error:", "print(") is matched as a literal substring
+    instead - boundary matching corrupts a pattern built from those
+    characters, and each is already distinctive enough on its own.
+    """
+    for sig in signals:
+        core = sig.strip()
+        if not core:
+            continue
+        if re.search(r"[^\w\s]", core):
+            if core in text:
+                return sig
+        elif re.search(r"\b" + re.escape(core) + r"\b", text):
+            return sig
+    return None
 
 
 def _decide(
@@ -100,30 +123,30 @@ def route_task(task: TaskEnvelope, registry: ModelRegistry) -> RouterDecision:
             )
 
     # Rule 3 - code-flavoured signals in the free text.
-    for sig in CODE_SIGNALS:
-        if sig in text:
-            return _decide(
-                registry,
-                "coding",
-                "code",
-                "code signal: %r - requires executable computation" % sig,
-                "R3_CODE_SIGNAL",
-                sig,
-                t0,
-            )
+    code_sig = _first_signal(text, CODE_SIGNALS)
+    if code_sig is not None:
+        return _decide(
+            registry,
+            "coding",
+            "code",
+            "code signal: %r - requires executable computation" % code_sig,
+            "R3_CODE_SIGNAL",
+            code_sig,
+            t0,
+        )
 
     # Rule 4 - an explicit deliverable was requested.
-    for sig in DOC_SIGNALS:
-        if sig in text:
-            return _decide(
-                registry,
-                "reasoning",
-                "planning",
-                "deliverable requested: %r" % sig,
-                "R4_DELIVERABLE",
-                sig,
-                t0,
-            )
+    doc_sig = _first_signal(text, DOC_SIGNALS)
+    if doc_sig is not None:
+        return _decide(
+            registry,
+            "reasoning",
+            "planning",
+            "deliverable requested: %r" % doc_sig,
+            "R4_DELIVERABLE",
+            doc_sig,
+            t0,
+        )
 
     # Default.
     return _decide(
