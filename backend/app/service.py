@@ -20,7 +20,11 @@ is the same code in both modes.
 from __future__ import annotations
 
 import asyncio
+import shutil
+from pathlib import Path
 from typing import Optional
+
+from fastapi import HTTPException
 
 from .agents import AgentRegistry, build_agents
 from .config import MAX_ITERATIONS, ModelRegistry, Settings, get_registry, get_settings
@@ -30,11 +34,18 @@ from .orchestration.dispatcher import Dispatcher
 from .orchestration.events import EventBus
 from .orchestration.executor import Executor
 from .orchestration.planner import Planner, build_planner
-from .orchestration.state import TaskRecord, TaskStore, new_session_id, new_task_id
+from .orchestration.state import (
+    StagedUploadStore,
+    TaskRecord,
+    TaskStore,
+    new_session_id,
+    new_task_id,
+)
 from .router import route_task
 from .security.audit import AuditLog
 from .security.netwatch import NetworkMonitor
-from .security.paths import ensure_workspace
+from .security.paths import PathEscape, ensure_workspace, jail, to_rel
+from .tools.base import task_root
 from .tools.registry import ToolRegistry, build_registry
 
 
@@ -58,6 +69,9 @@ class SetuService:
         self.history = history
         self.bus = EventBus()
         self.store = TaskStore()
+        #: Who staged which upload. Consulted by create_task before any file
+        #: path is accepted - see _materialise_uploads.
+        self.uploads = StagedUploadStore()
         self.monitor = NetworkMonitor(settings)
         self.dispatcher = Dispatcher(settings, models, agents, tools)
         self.executor = Executor(settings, models, self.dispatcher, self.bus, audit)
@@ -78,17 +92,84 @@ class SetuService:
 
     # -- task lifecycle ------------------------------------------------------
 
+    def _materialise_uploads(
+        self, task_id: str, session_id: str, requested: list[str]
+    ) -> list[str]:
+        """Validate every requested upload, copy it into the task root, and
+        return the REWRITTEN task-relative paths.
+
+        Called before the TaskRecord is stored and before route_task runs, so
+        the router and every downstream agent and tool only ever see a
+        task-relative path.
+
+        A path that was never staged, or was staged by a different session, is
+        refused with 400 for the WHOLE request. It is deliberately not skipped:
+        silently dropping an attachment gives the operator a task that quietly
+        ignored their file, which looks like success.
+        """
+        if not requested:
+            return []
+
+        # Validate EVERY entry before copying ANY of them. Copying as we go and
+        # raising partway through would leave a half-populated task root for a
+        # task that was refused and never stored.
+        sources: list[tuple[str, Path]] = []
+        for rel in requested:
+            staged = self.uploads.get(rel)
+            if staged is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "file_paths entry %r was never staged through POST /api/upload. "
+                        "A task may only reference uploads it staged in this session."
+                        % rel
+                    ),
+                )
+            if staged.session_id is None or staged.session_id != session_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "file_paths entry %r belongs to a different session. An upload "
+                        "is claimable only by the session that staged it." % rel
+                    ),
+                )
+            try:
+                source = jail(rel, self.settings.workspace)
+            except PathEscape as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if not source.is_file():
+                raise HTTPException(
+                    status_code=400,
+                    detail="file_paths entry %r is staged but no longer on disk" % rel,
+                )
+            sources.append((rel, source))
+
+        root = task_root(self.settings.workspace, task_id)
+        dest_dir = root / "uploads"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        rewritten: list[str] = []
+        for rel, source in sources:
+            destination = dest_dir / Path(rel).name
+            shutil.copy2(source, destination)
+            rewritten.append(to_rel(destination, root))
+
+        return rewritten
+
     def create_task(
         self, req: TaskCreateRequest, session_id: Optional[str] = None
     ) -> tuple[TaskRecord, RouterDecision, Planner]:
         """Route and plan-select synchronously so the caller gets a decision
         immediately; execution is started separately by `start`."""
         resolved_session_id = session_id or req.session_id or new_session_id()
+        task_id = new_task_id()
+        file_paths = self._materialise_uploads(task_id, resolved_session_id, list(req.file_paths))
+
         envelope = TaskEnvelope(
             session_id=resolved_session_id,
-            task_id=new_task_id(),
+            task_id=task_id,
             text=req.text,
-            file_paths=list(req.file_paths),
+            file_paths=file_paths,
             conversation_context=self.history.context(resolved_session_id),
         )
         record = self.store.create(envelope, mock_mode=self.settings.mock_mode)
