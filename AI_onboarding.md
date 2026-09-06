@@ -180,7 +180,7 @@ None active. Initial scaffolding and git import successful.
 
 | Area | Test / Check | Command | Result | Last Verified | Notes |
 |------|--------------|---------|--------|---------------|-------|
-| Backend | `pytest` | `pytest backend/tests -q` | 212 pass, 1 skip, 1 fail | 2026-09-06 | 1 known fail: `test_api.py::test_sse_replays_route_and_plan_for_a_late_subscriber` (P1 SSE orchestration issue). P6 tests 17/17 pass. |
+| Backend | `pytest` | `pytest backend/tests -q` | 212 pass, 1 skip, 1 fail | 2026-09-06 | `p6-deliverables` branch result: 1 fail (P1 SSE bug). Note: The P1 SSE bug is VERIFIED FIXED on `origin/master` (9154aab) but P6 branch has not yet absorbed the fix. P6 tests 17/17 pass. |
 | Frontend| `npm run build` | `tsc -b && vite build` | PASS | 2026-09-05 | 163kB JS |
 | Audit | `verify_audit.py` | `python scripts/verify_audit.py` | PASS | 2026-09-05 | Chain intact |
 | Health | `/api/health` | curl | PASS | 2026-09-05 | JSON returned |
@@ -219,6 +219,11 @@ Mock adapters are actively isolating agents (`backend/app/mocks/adapters.py`). D
 
 ## SECTION 15 — RECENT CHANGES
 
+### 2026-09-06 — Uncharted1804 (P1)
+Changed:
+- P1 SSE replay/finalise race verified fixed on origin/master at 9154aab; targeted regression 3/3 PASS; full test_api.py 3/3 PASS.
+- The fix is in `backend/app/orchestration/events.py`.
+
 ### 2026-09-06 — Mudit Ranjan / Antigravity (P6)
 Changed:
 - Committed `05a6b76 feat(p6): complete document, spreadsheet, audit, integrity and demo deliverables`
@@ -242,11 +247,11 @@ CURRENT OBJECTIVE: Un-mock the scaffolded agents and tools. Complete T-3 pre-hac
 CURRENTLY WORKING ON: Integration validation
 FILES BEING TOUCHED: None
 WHAT IS WORKING: The entire orchestration loop, frontend, router, audit, P6 deliverables (docgen, sheets, integrity), and tests.
-WHAT IS NOT WORKING: Agents and tools are mostly returning mocked data. P1 SSE replay test is failing (`test_sse_replays_route_and_plan_for_a_late_subscriber`).
+WHAT IS NOT WORKING: Agents and tools are mostly returning mocked data. The P1 SSE replay test still fails locally on `p6-deliverables` because the branch has not yet absorbed the fix.
 LAST VERIFIED COMMAND: `pytest backend/tests -q`
-LAST VERIFIED RESULT: 212 passed, 1 skipped, 1 failed (P1 SSE issue)
+LAST VERIFIED RESULT: 212 passed, 1 skipped, 1 failed (on current branch). Note: The P1 fix is independently verified on `origin/master` with 3/3 PASS.
 CURRENT BLOCKER: None.
-NEXT ACTION: P6 is complete. P6 next phase is integration/demo validation on the team's RTX 4060 8GB demo machine. P1 should wire actual Ollama calls instead of mocks and fix the SSE failure.
+NEXT ACTION: P6 is complete. P6 next phase is integration/demo validation on the team's RTX 4060 8GB demo machine. P1 should wire actual Ollama calls instead of mocks.
 IMPORTANT CONTEXT: P6 deliverables are finalized and committed in `05a6b76`.
 
 ## SECTION 17 — NEXT SAFE ACTIONS
@@ -255,7 +260,7 @@ IMPORTANT CONTEXT: P6 deliverables are finalized and committed in `05a6b76`.
 2. P6: Validate end-to-end demo flow, spreadsheet tool loop, and audit/security evidence.
 3. P6: Perform hardware/demo-machine verification on the RTX 4060 8GB.
 4. P4: Run `scripts/preflight.py` and verify Ollama/Docker on the host machine.
-5. P1: Replace `MockAgent("vision")` with actual `VisionAgent` logic and resolve SSE failure.
+5. P1: Replace `MockAgent("vision")` with actual `VisionAgent` logic.
 
 ## SECTION 18 — AI RULES
 
