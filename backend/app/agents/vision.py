@@ -137,13 +137,36 @@ class VisionAgent:
         entry = self.ctx.model_for("vision")
 
         # -- 2. Get file path(s) from the orchestrator relay ------------------
-        # P1 relays: inputs = {"why": step.why, "args": step.args, "prior": [...]}
+        # P1 relays: inputs = {"why": step.why, "args": step.args, "prior": [...], "file_paths": [...]}
         args = inv.inputs.get("args") or {}
-        file_paths: list[str] = args.get("file_paths") or inv.inputs.get("file_paths") or []
+        file_paths: list[str] = (
+            args.get("file_paths")
+            or args.get("input_paths")
+            or args.get("paths")
+            or args.get("files")
+            or args.get("image_paths")
+            or args.get("images")
+            or inv.inputs.get("file_paths")
+            or []
+        )
 
         # Also accept a single path
-        if not file_paths and (args.get("file_path") or inv.inputs.get("file_path")):
-            file_paths = [args.get("file_path") or inv.inputs.get("file_path")]
+        if not file_paths and (
+            args.get("file_path")
+            or args.get("input_path")
+            or args.get("path")
+            or args.get("image_path")
+            or inv.inputs.get("file_path")
+        ):
+            single = (
+                args.get("file_path")
+                or args.get("input_path")
+                or args.get("path")
+                or args.get("image_path")
+                or inv.inputs.get("file_path")
+            )
+            if single:
+                file_paths = [single]
 
         # Task file_paths may also come from the task envelope via prior
         if not file_paths:

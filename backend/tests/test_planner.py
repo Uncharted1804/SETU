@@ -193,6 +193,20 @@ def test_a_hallucinated_agent_also_fails_validation(planner, stub):
         asyncio.run(planner.propose(_task(), _decision()))
 
 
+def test_kind_is_autocorrected_when_llm_confuses_agent_and_tool(planner, stub):
+    """When the LLM targets 'vision' with kind='tool', it is normalized to kind='agent'."""
+    stub({"steps": [
+        {"kind": "tool", "target": "vision", "args": {}, "why": "inspect image"},
+        {"kind": "agent", "target": "read_file", "args": {"path": "test.txt"}, "why": "read"},
+    ]})
+
+    plan = asyncio.run(planner.propose(_task(), _decision()))
+    assert plan.steps[0].kind == "agent"
+    assert plan.steps[0].target == "vision"
+    assert plan.steps[1].kind == "tool"
+    assert plan.steps[1].target == "read_file"
+
+
 def test_a_plan_longer_than_the_iteration_cap_is_refused(planner, stub):
     """Six steps cannot finish in five iterations; refuse rather than escalate."""
     step = {"kind": "agent", "target": "reasoning", "args": {}, "why": "think"}

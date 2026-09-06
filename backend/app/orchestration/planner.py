@@ -253,8 +253,12 @@ class ModelPlanner:
             "Rules:",
             "  * `target` MUST be exactly one of the agent or tool names above.",
             "    Any other name is rejected before the step runs.",
+            "  * For agents ('vision', 'reasoning', 'coding'), `kind` MUST be 'agent'.",
+            "  * For tools ('kb_search', 'read_file', etc.), `kind` MUST be 'tool'.",
             "  * Propose between 1 and %d steps. Fewer is better." % self.MAX_STEPS,
             "  * `args` must match that tool's argument schema.",
+            "  * If write_file or docgen content depends on a prior agent step, leave `content`",
+            "    empty or use '<content>'; it will automatically be populated from that agent's output.",
             "  * `why` is one short sentence shown to a human in an approval",
             "    checklist. Write it for them, not for yourself.",
             "  * Reply with JSON only. No prose, no code fences.",
@@ -387,10 +391,21 @@ class ModelPlanner:
             raise PlannerError(
                 "a proposed step was %s, not a JSON object" % type(raw).__name__
             )
+        from ..contracts import AGENT_NAMES, TOOL_NAMES
+
+        kind = raw.get("kind")
+        target = raw.get("target")
+
+        # Auto-correct kind if the LLM mixed up agent vs tool classification
+        if target in AGENT_NAMES and kind != "agent":
+            kind = "agent"
+        elif target in TOOL_NAMES and kind != "tool":
+            kind = "tool"
+
         return PlanStep(
             n=n,
-            kind=raw.get("kind"),
-            target=raw.get("target"),
+            kind=kind,
+            target=target,
             args=raw.get("args") or {},
             why=raw.get("why") or "",
         )

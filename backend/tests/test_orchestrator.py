@@ -321,6 +321,31 @@ def test_iteration_cap_is_enforced_and_is_not_reported_as_success(service, monke
     assert "iteration cap reached" in (record.escalation_reason or "")
 
 
+def test_resolve_tool_placeholders_from_prior_observations():
+    from app.contracts import Observation, PlanStep
+    from app.orchestration.executor import _resolve_tool_placeholders
+
+    step = PlanStep(
+        n=2,
+        kind="tool",
+        target="write_file",
+        args={"content": "<generated_code>", "path": "test.py"},
+        why="write",
+    )
+    obs = Observation(
+        step_n=1,
+        kind="agent",
+        target="reasoning",
+        ok=True,
+        summary="code drafted",
+        payload={"content": "def add(a, b):\n    return a + b\n"},
+        confidence=0.9,
+        iteration=1,
+    )
+    _resolve_tool_placeholders(step, [obs])
+    assert step.args["content"] == "def add(a, b):\n    return a + b\n"
+
+
 # -- failures become observations, not crashes ------------------------------
 
 
