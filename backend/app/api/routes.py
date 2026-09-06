@@ -383,7 +383,12 @@ async def download_artifact(request: Request, task_id: str, artifact_id: str):
 
 
 @router.post("/upload")
-async def upload(request: Request, file: UploadFile = File(...), session_id: Optional[str] = Form(default=None)):
+async def upload(
+    request: Request,
+    response: Response,
+    file: UploadFile = File(...),
+    session_id: Optional[str] = Form(default=None),
+):
     """Uploads land in workspace/uploads under a SERVER-CONTROLLED name.
 
     The client's filename is sanitised and prefixed; it is never used as a path
@@ -405,6 +410,15 @@ async def upload(request: Request, file: UploadFile = File(...), session_id: Opt
     if not result.allowed:
         raise HTTPException(status_code=415, detail=result.reason)
 
+    # An upload is claimable only by its active, server-issued session.  A
+    # caller may supply an existing session id (for an explicit API flow), but
+    # an absent or unknown value must never be recorded as an owner that task
+    # creation will subsequently replace with a different generated id.
+    resolved_session_id = _active_session(request, session_id)
+    if resolved_session_id is None:
+        resolved_session_id = new_session_id()
+        service.history.create_session(resolved_session_id)
+
     storage_name = safe_storage_name(file.filename or "upload", prefix=secrets.token_hex(3) + "_")
     rel = "uploads/" + storage_name
     try:
@@ -417,14 +431,15 @@ async def upload(request: Request, file: UploadFile = File(...), session_id: Opt
     target.write_bytes(raw)
     # Record who staged this. create_task refuses a file_paths entry that was
     # never staged or was staged by another session, so this is the point at
-    # which session_id stops being decorative.
-    service.uploads.stage(rel, session_id)
+    # which session ownership stops being decorative.
+    service.uploads.stage(rel, resolved_session_id)
+    _set_session_cookie(request, response, resolved_session_id)
     return {
         "path": rel,
         "original_name": file.filename,
         "stored_name": storage_name,
         "size_bytes": len(raw),
-        "session_id": session_id,
+        "session_id": resolved_session_id,
     }
 
 
