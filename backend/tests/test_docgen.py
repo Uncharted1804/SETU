@@ -138,3 +138,50 @@ def test_docgen_invalid_input(mock_ctx):
     with pytest.raises(ToolError) as excinfo:
         docgen(args, mock_ctx)
     assert excinfo.value.code == ErrorCode.NOT_FOUND
+
+
+def test_docgen_xlsx_with_formatting(mock_ctx):
+    from openpyxl import load_workbook
+    
+    data = {
+        "sheet_name": "Sensor_Analysis",
+        "headers": ["Timestamp", "Pressure_PSI", "Flow_GPM"],
+        "rows": [
+            ["2026-09-01 08:00", 100.2, 420.5],
+            ["2026-09-01 08:01", 155.0, 422.1],  # Row index 1 (OOS)
+            ["2026-09-01 08:02", 102.1, 419.8],
+            ["2026-09-01 08:03", 160.2, 425.0],  # Row index 3 (OOS)
+        ],
+        "formatting": {
+            "out_of_spec_rows": [1, 3],
+            "fill_color": "FFFFC7CE",
+        }
+    }
+    args = DocgenArgs(
+        kind="xlsx",
+        data=data,
+        out_name="analysis.xlsx"
+    )
+    res = docgen(args, mock_ctx)
+    assert res["kind"] == "xlsx"
+    out_path = mock_ctx._root / res["path"]
+    assert out_path.exists()
+    
+    wb = load_workbook(str(out_path))
+    ws = wb["Sensor_Analysis"]
+    assert ws.max_row == 5  # 1 header + 4 data rows
+    
+    # Row 2 (index 0) should have no fill
+    assert ws.cell(row=2, column=2).fill.fill_type is None
+    
+    # Row 3 (index 1) was in out_of_spec_rows -> should have solid fill
+    assert ws.cell(row=3, column=2).fill.fill_type == "solid"
+    assert ws.cell(row=3, column=2).fill.start_color.rgb == "FFFFC7CE"
+    
+    # Row 4 (index 2) -> normal
+    assert ws.cell(row=4, column=2).fill.fill_type is None
+    
+    # Row 5 (index 3) was in out_of_spec_rows -> solid fill
+    assert ws.cell(row=5, column=2).fill.fill_type == "solid"
+    assert ws.cell(row=5, column=2).fill.start_color.rgb == "FFFFC7CE"
+

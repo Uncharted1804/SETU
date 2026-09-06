@@ -29,7 +29,7 @@ from .base import ToolContext, ToolError, optional_import
 
 CHUNK_CHARS = 800
 CHUNK_OVERLAP = 150
-DEFAULT_TOP_K = 5
+DEFAULT_TOP_K = 3
 DISTANCE_CUTOFF = 0.40
 COLLECTION = "setu_corpus"
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"

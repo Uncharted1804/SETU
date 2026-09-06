@@ -157,6 +157,8 @@ def _docx(args: DocgenArgs, ctx: ToolContext):
 
 def _xlsx(args: DocgenArgs, ctx: ToolContext):
     openpyxl = optional_import("openpyxl", owner="P6", purpose="XLSX generation")
+    from openpyxl.styles import PatternFill
+    
     data: dict[str, Any] = args.data or {}
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -166,9 +168,23 @@ def _xlsx(args: DocgenArgs, ctx: ToolContext):
         ws.append([str(h) for h in headers])
     for row in data.get("rows") or []:
         ws.append(list(row))
-    # P6 TODO (acceptance: the three deliberate out-of-spec rows in
-    # sensor_readings.xlsx render red in the produced workbook):
-    #   conditional formatting driven by data["formatting"]["out_of_spec_rows"]
+        
+    formatting = data.get("formatting") or {}
+    out_of_spec_rows = formatting.get("out_of_spec_rows") or formatting.get("highlight_rows")
+    if out_of_spec_rows:
+        color_hex = formatting.get("fill_color", "FFFFC7CE")  # Soft red
+        try:
+            fill = PatternFill(start_color=color_hex, end_color=color_hex, fill_type="solid")
+        except ValueError:
+            fill = PatternFill(start_color="FFFFC7CE", end_color="FFFFC7CE", fill_type="solid")
+            
+        start_row = 2 if headers else 1
+        for idx in out_of_spec_rows:
+            row_num = idx + start_row if idx < len(data.get("rows") or []) else idx
+            if 1 <= row_num <= ws.max_row:
+                for cell in ws[row_num]:
+                    cell.fill = fill
+                    
     target = _out_path(ctx, args)
     wb.save(str(target))
     return target

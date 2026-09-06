@@ -16,9 +16,11 @@ MID-TASK.  Producing an .xlsx at the end satisfies R9 and leaves R7 unmet.
               Lets the model reason about a 400-row workbook without loading it
               into an 8k context.  This is the loop earning its keep on stage.
     read      headers + typed rows, truncated.
-    compute   runs generated pandas/openpyxl IN THE SANDBOX against a READ-ONLY
+    compute   runs generated openpyxl IN THE SANDBOX against a READ-ONLY
               mount.  Returns result + script + intermediates - that is where
-              "calculations with steps shown" comes from.
+              "calculations with steps shown" comes from.  The generated script
+              uses openpyxl and the standard library ONLY: pandas is not in the
+              sandbox image and cannot be installed at runtime.
     write     writes a NEW file into the workspace.  NEVER overwrites an input
               (enforced in SheetOpArgs, not just by convention).
 
@@ -48,6 +50,26 @@ def _open(ctx: ToolContext, rel: str, read_only: bool = True):
     return openpyxl.load_workbook(str(target), read_only=read_only, data_only=True), target
 
 
+def _header_row(ws, max_scan: int = 5) -> int:
+    """1-based index of the row holding the column headers.
+
+    A plant export often opens with a merged banner row - one title cell then
+    blanks - with the real headers underneath it.  data/demo_assets/
+    sensor_readings.xlsx is exactly that shape.  Taking row 1 blindly reports
+    the banner as the header and shifts every dtype and value down by a row.
+    `read_only=True` does not load merged ranges, so the SHAPE of the row is
+    the signal, not the merge itself.
+    """
+    # ponytail: "first row with >=2 populated cells" heuristic, not a merged-
+    # range parser.  Upgrade if a workbook ever ships a real 1-column header.
+    for idx, row in enumerate(
+        ws.iter_rows(min_row=1, max_row=max_scan, values_only=True), start=1
+    ):
+        if sum(1 for c in row if c is not None and str(c).strip() != "") >= 2:
+            return idx
+    return 1
+
+
 def _describe(args: SheetOpArgs, ctx: ToolContext) -> dict:
     """REAL implementation - describe is on the never-cut list."""
     wb, _ = _open(ctx, args.path)
@@ -63,15 +85,18 @@ def _describe(args: SheetOpArgs, ctx: ToolContext) -> dict:
             rows = ws.max_row or 0
             cols = ws.max_column or 0
             dims[name] = (rows, cols)
+            hrow = _header_row(ws)
             head: list[str] = []
-            for row in ws.iter_rows(min_row=1, max_row=1, values_only=True):
+            for row in ws.iter_rows(min_row=hrow, max_row=hrow, values_only=True):
                 head = [str(c) if c is not None else "" for c in row]
                 break
             headers[name] = head
             col_types: dict[str, str] = {}
             col_nulls: dict[str, int] = {}
             sampled = 0
-            for row in ws.iter_rows(min_row=2, max_row=min(rows, 201), values_only=True):
+            for row in ws.iter_rows(
+                min_row=hrow + 1, max_row=min(rows, hrow + 200), values_only=True
+            ):
                 sampled += 1
                 for idx, value in enumerate(row):
                     key = head[idx] if idx < len(head) and head[idx] else "col_%d" % (idx + 1)
@@ -96,16 +121,17 @@ def _read(args: SheetOpArgs, ctx: ToolContext) -> dict:
     wb, _ = _open(ctx, args.path)
     try:
         ws = wb[args.sheet] if args.sheet else wb.worksheets[0]
+        hrow = _header_row(ws)
         head: list[str] = []
         rows: list[list[Any]] = []
-        for i, row in enumerate(ws.iter_rows(values_only=True)):
-            if i == 0:
+        for i, row in enumerate(ws.iter_rows(min_row=hrow, values_only=True), start=hrow):
+            if i == hrow:
                 head = [str(c) if c is not None else "" for c in row]
                 continue
             if len(rows) >= args.max_rows:
                 break
             rows.append([c for c in row])
-        total = (ws.max_row or 1) - 1
+        total = max((ws.max_row or hrow) - hrow, 0)
     finally:
         wb.close()
     out = SheetRows(
@@ -134,79 +160,125 @@ def _generate_compute_script(spec_str: str, path_name: str) -> str:
     min_limit = spec.get("min_limit")
     max_limit = spec.get("max_limit")
     
-    script = f"""import pandas as pd
-import json
-import sys
+    # openpyxl + stdlib ONLY.  setu-sandbox:py311 pins openpyxl, et-xmlfile and
+    # numpy (sandbox/Dockerfile) and has pip stripped out, so a generated script
+    # that imports pandas fails with ModuleNotFoundError on every real run.
+    script = f'''import json
 import math
+import statistics
+from openpyxl import load_workbook
+
+WORKBOOK = "/inputs/{path_name}"
+SHEET = {sheet!r}
+COLUMN = {col!r}
+MIN_LIMIT = {min_limit if min_limit is not None else "None"}
+MAX_LIMIT = {max_limit if max_limit is not None else "None"}
+
+
+def header_row(ws, max_scan=5):
+    """First row with two or more populated cells.
+
+    A plant export often opens with a merged banner row - one title cell then
+    blanks - with the real headers underneath.  Taking row 1 blindly shifts
+    every value down by one row.
+    """
+    for idx, row in enumerate(
+        ws.iter_rows(min_row=1, max_row=max_scan, values_only=True), start=1
+    ):
+        if sum(1 for c in row if c is not None and str(c).strip() != "") >= 2:
+            return idx
+    return 1
+
+
+def cell_value(value):
+    """JSON-safe scalar.  Dates and times become ISO strings."""
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value if isinstance(value, int) or math.isfinite(value) else None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
 
 def main():
     try:
-        df = pd.read_excel('/inputs/{path_name}', sheet_name={repr(sheet)})
-    except Exception as e:
-        print(json.dumps({{"error": "Failed to read excel: " + str(e)}}))
-        sys.exit(0)
+        wb = load_workbook(WORKBOOK, read_only=True, data_only=True)
+    except Exception as exc:
+        print(json.dumps({{"error": "failed to read workbook: %s" % exc}}))
+        return
 
-    if {repr(col)} not in df.columns:
-        print(json.dumps({{"error": f"Column {repr(col)} not found"}}))
-        sys.exit(0)
-        
-    numeric_series = pd.to_numeric(df[{repr(col)}], errors='coerce')
-    
-    count = float(numeric_series.count())
-    mean = float(numeric_series.mean()) if count > 0 else None
-    min_val = float(numeric_series.min()) if count > 0 else None
-    max_val = float(numeric_series.max()) if count > 0 else None
-    
-    def _clean_float(val):
-        if val is None or math.isnan(val) or math.isinf(val):
-            return None
-        return float(val)
-        
+    if SHEET not in wb.sheetnames:
+        print(json.dumps({{
+            "error": "sheet %r not found" % SHEET, "sheets": wb.sheetnames
+        }}))
+        return
+
+    ws = wb[SHEET]
+    hrow = header_row(ws)
+    headers = []
+    for row in ws.iter_rows(min_row=hrow, max_row=hrow, values_only=True):
+        headers = [str(c).strip() if c is not None else "" for c in row]
+        break
+
+    if COLUMN not in headers:
+        print(json.dumps({{
+            "error": "Column %s not found" % COLUMN, "headers": headers
+        }}))
+        return
+    ci = headers.index(COLUMN)
+
+    values = []
+    non_numeric = 0
+    scanned = 0
+    out_of_spec = []
+
+    for n, row in enumerate(ws.iter_rows(min_row=hrow + 1, values_only=True), start=hrow + 1):
+        if ci >= len(row):
+            continue
+        scanned += 1
+        raw = row[ci]
+        if raw is None or str(raw).strip() == "":
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            # The deliberate text value in a numeric column lands here.
+            non_numeric += 1
+            continue
+        if not math.isfinite(value):
+            non_numeric += 1
+            continue
+
+        values.append(value)
+        low = MIN_LIMIT is not None and value < MIN_LIMIT
+        high = MAX_LIMIT is not None and value > MAX_LIMIT
+        if low or high:
+            record = {{}}
+            for hi, head in enumerate(headers):
+                if head and hi < len(row):
+                    record[head] = cell_value(row[hi])
+            record["_row_index"] = n
+            out_of_spec.append(record)
+
     result = {{
-        "count": _clean_float(count),
-        "mean": _clean_float(mean),
-        "min": _clean_float(min_val),
-        "max": _clean_float(max_val),
-        "out_of_spec": []
+        "count": float(len(values)),
+        "mean": statistics.mean(values) if values else None,
+        "min": min(values) if values else None,
+        "max": max(values) if values else None,
+        "out_of_spec": out_of_spec,
     }}
-    
     intermediates = {{
-        "anomalies_found": int(numeric_series.isna().sum())
+        "header_row": hrow,
+        "rows_scanned": scanned,
+        "anomalies_found": non_numeric,
     }}
-    
-    min_limit = {min_limit if min_limit is not None else 'None'}
-    max_limit = {max_limit if max_limit is not None else 'None'}
-    
-    mask = pd.Series(False, index=df.index)
-    if min_limit is not None:
-        mask = mask | (numeric_series < min_limit)
-    if max_limit is not None:
-        mask = mask | (numeric_series > max_limit)
-        
-    oos_df = df[mask]
-    
-    for idx, row in oos_df.iterrows():
-        row_dict = row.where(pd.notnull(row), None).to_dict()
-        row_dict['_row_index'] = int(idx) + 2
-        
-        # Clean any nested NaNs/Infs
-        cleaned_dict = {{}}
-        for k, v in row_dict.items():
-            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-                cleaned_dict[k] = None
-            else:
-                cleaned_dict[k] = v
-                
-        result['out_of_spec'].append(cleaned_dict)
-        
-    print(json.dumps({{
-        "result": result,
-        "intermediates": intermediates
-    }}))
+    print(json.dumps({{"result": result, "intermediates": intermediates}}))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
-"""
+'''
     return script
 
 
