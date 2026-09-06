@@ -33,7 +33,7 @@ import yaml
 
 from .contracts import ModelEntry
 
-VERSION = "0.1.0-scaffold"
+VERSION = "0.1.0"
 
 # Repo root:  backend/app/config.py -> backend/app -> backend -> <repo>
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent

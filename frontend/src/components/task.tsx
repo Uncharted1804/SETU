@@ -8,135 +8,62 @@
 import { useMemo } from "react";
 import { api } from "../api";
 import type {
-  ApprovalRequest,
   ArtifactRef,
   RouterDecision,
   SetuEvent,
   TaskStatus,
 } from "../types";
-import { Empty, Panel, PlainText, SimulatedTag, Tag } from "./common";
+import { Empty, Panel, PlainText, SimulatedTag } from "./common";
 
 /** Proof of R4: the decision, the reason and the latency, above every response. */
 export function RouterBanner({ decision }: { decision: RouterDecision | null }) {
-  if (!decision) {
-    return (
-      <div className="route-line text-xs text-muted">
-        no routing decision yet
-      </div>
-    );
-  }
+  if (!decision) return <p className="route-line">Choosing a workflow…</p>;
   return (
-    <div className="route-line">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <span className="text-muted">workflow selected</span>
-        <Tag tone="accent">{decision.agent}</Tag>
-        <span className="text-muted">·</span>
-        <span className="text-slate-300">{decision.reason}</span>
-        <span className="text-muted">·</span>
-        <span className="font-mono text-muted">{decision.rule_id}</span>
-        <span className="text-muted">·</span>
-        <span className="font-mono text-muted">{decision.latency_ms.toFixed(2)} ms</span>
-      </div>
-    </div>
+    <p className="route-line">
+      <span className="route-agent">{decision.agent}</span>
+      {decision.reason}
+      <span className="route-meta">{decision.rule_id}, {decision.latency_ms.toFixed(2)} ms</span>
+    </p>
   );
 }
 
-const STATUS_TONE: Record<string, "neutral" | "good" | "warn" | "bad" | "accent"> = {
-  pending: "neutral",
-  running: "accent",
-  done: "good",
-  failed: "bad",
-  skipped: "warn",
-};
-
 export function PlanChecklist({
   status,
-  onDecision,
-  busy,
 }: {
   status: TaskStatus | null;
-  onDecision: (approval: ApprovalRequest, approved: boolean) => void;
-  busy: boolean;
 }) {
   const plan = status?.plan ?? null;
   const pending = status?.pending_approval ?? null;
   const undecided = pending && !pending.decided ? pending : null;
 
   return (
-    <Panel
-      title="Plan"
-      right={
-        status ? (
-          <span className="font-mono text-[10px] text-muted">
-            iteration {status.iterations_used}/{status.max_iterations}
-            {plan && plan.revisions > 0 ? ` · ${plan.revisions} revision(s)` : ""}
-          </span>
-        ) : undefined
-      }
-    >
+    <div className="plan-body">
       {!plan || plan.steps.length === 0 ? (
-        <Empty>no plan proposed yet</Empty>
+        <p className="work-empty">No plan proposed yet.</p>
       ) : (
-        <ol className="space-y-1">
+        <ol className="plan-steps">
           {plan.steps.map((step) => (
-            <li
-              key={`${step.n}-${step.target}`}
-              className="flex items-start gap-2 rounded border border-edge/60 px-2 py-1.5"
-            >
-              <span className="mt-0.5 font-mono text-[10px] text-muted">{step.n}</span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs text-slate-200">
-                    {step.kind === "agent" ? "agent" : "tool"}:{step.target}
-                  </span>
-                  <Tag tone={STATUS_TONE[step.status] ?? "neutral"}>{step.status}</Tag>
-                </div>
-                <p className="mt-0.5 text-[11px] text-muted">{step.why}</p>
+            <li key={`${step.n}-${step.target}`} className={`plan-step is-${step.status}`}>
+              <span className="step-dot" aria-hidden="true" />
+              <div>
+                <p className="step-title">
+                  {step.target}
+                  <span className="step-status">{step.status}</span>
+                </p>
+                <p className="step-why">{step.why}</p>
               </div>
             </li>
           ))}
         </ol>
       )}
 
-      {undecided && (
-        <div className="mt-3 rounded border border-warn/50 bg-warn/5 p-3">
-          <div className="flex items-center gap-2">
-            <Tag tone="warn">
-              {undecided.kind === "write" ? "write approval" : "approval required"}
-            </Tag>
-            <span className="text-xs text-slate-300">{undecided.summary}</span>
-          </div>
-
-          {undecided.kind === "write" && (
-            <div className="mt-2">
-              <p className="mb-1 text-[10px] uppercase tracking-wider text-muted">
-                content to be committed to {undecided.target_path}
-              </p>
-              <pre className="max-h-52 overflow-auto rounded bg-ink p-2 font-mono text-[11px] text-slate-300">
-                {undecided.preview ?? "(no textual preview available)"}
-              </pre>
-            </div>
-          )}
-
-          <div className="mt-3 flex gap-2">
-            <button
-              disabled={busy}
-              onClick={() => onDecision(undecided, true)}
-              className="rounded bg-good/20 px-3 py-1 text-xs font-medium text-good hover:bg-good/30 disabled:opacity-40"
-            >
-              Approve
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => onDecision(undecided, false)}
-              className="rounded bg-bad/20 px-3 py-1 text-xs font-medium text-bad hover:bg-bad/30 disabled:opacity-40"
-            >
-              Reject
-            </button>
-          </div>
+      {undecided && undecided.kind === "write" && (
+        <div className="approval-preview">
+          <p>Content to be written to {undecided.target_path}</p>
+          <pre>{undecided.preview ?? "(no textual preview available)"}</pre>
         </div>
       )}
-    </Panel>
+    </div>
   );
 }
 
@@ -242,53 +169,60 @@ export function StreamView({
     [events],
   );
 
+  const isReconnecting = !connected && Boolean(error && error.includes("reconnecting"));
+  const realError = error && !error.includes("reconnecting") ? error : null;
+
   return (
-    <Panel
-      title="Execution"
-      right={
-        <span className="text-[10px] text-muted">
-          {connected ? "streaming" : "not connected"} · {events.length} events
+    <details className="work-disclosure" open>
+      <summary>
+        <span className="disclosure-label">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+          Activity
         </span>
-      }
-    >
-      {error && (
-        <p className="mb-2 rounded border border-warn/40 bg-warn/5 px-2 py-1 text-[11px] text-warn">
-          {error}
-        </p>
-      )}
-      {visible.length === 0 ? (
-        <Empty>submit a task to see live execution</Empty>
-      ) : (
-        <ul className="space-y-1">
-          {visible.map((event) => {
-            const line = eventLine(event);
-            return (
-              <li key={event.seq} className="flex gap-2 border-b border-edge/40 py-1 last:border-0">
-                <span className="w-8 shrink-0 font-mono text-[10px] text-muted">
-                  {event.seq}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <Tag tone={line.tone}>{line.label}</Tag>
-                    {line.sim && <SimulatedTag />}
-                  </div>
-                  {line.body && (
-                    <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] text-slate-300">
-                      {line.body}
+        <span className="activity-summary-meta">
+          {isReconnecting && (
+            <span className="reconnecting-spinner" title="Stream reconnecting in background (task continues running)">
+              <svg className="spinner-icon" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+            </span>
+          )}
+          <span>{visible.length} steps</span>
+        </span>
+      </summary>
+      <div className="work-disclosure-body">
+        {realError && <p className="work-note">{realError}</p>}
+        {visible.length === 0 ? (
+          <p className="work-empty">Nothing has run yet.</p>
+        ) : (
+          <ul className="stream-list">
+            {visible.map((event) => {
+              const line = eventLine(event);
+              return (
+                <li key={event.seq} className={`stream-row tone-${line.tone}`}>
+                  <span className="stream-dot" aria-hidden="true" />
+                  <div>
+                    <p className="stream-label">
+                      {line.label}
+                      {line.sim && <span className="stream-sim">simulated</span>}
                     </p>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {tokens && (
-        <div className="mt-3 rounded border border-edge bg-ink p-2">
-          <PlainText text={tokens} />
-        </div>
-      )}
-    </Panel>
+                    {line.body && <p className="stream-body">{line.body}</p>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {tokens && (
+          <div className="stream-tokens">
+            <PlainText text={tokens} />
+          </div>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -312,7 +246,7 @@ export function Artifacts({
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="truncate font-mono text-xs text-slate-200">{a.name}</span>
+                  <span className="truncate font-mono text-xs text-slate-900 dark:text-slate-100">{a.name}</span>
                   {a.simulated && <SimulatedTag />}
                 </div>
                 <p className="truncate font-mono text-[10px] text-muted">

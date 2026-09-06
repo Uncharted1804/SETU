@@ -1110,6 +1110,17 @@ data: <json_string>
 
 ## 15. RECENT CHANGES
 
+### 2026-09-06 — P5 / AI (FRONTEND REFINEMENTS & THEME HARMONIZATION)
+- Item 1 (Scaffold cleanup): Removed `0.1.0-scaffold` version tag from header; updated `backend/app/config.py` VERSION to `0.1.0`.
+- Item 2 (Composer resize & expand): Implemented auto-resizing composer textarea with Gemini-style height limit (max 160px), resetting on empty text, and added an Enlarge button opening an expanded prompt modal with char/word counter and keyboard shortcuts (Ctrl+Enter to send, Esc to close).
+- Item 3 (Chat proportions): Corrected 'Message SETU' placeholder vertical centering and alignment in the input dock.
+- Item 4 (Plan approval options): Removed default pre-selected solid green highlight on Approve; rendered both Approve and Reject as neutral unselected options with directional hover (emerald/rose); wired `decidingChoice` state so only the clicked button activates into a selected state.
+- Item 5 (Quiet stream reconnect): Replaced the blinking orange reconnect banner with a quiet rotating spinner in the Activity summary header.
+- Item 6 (Network posture telemetry): Redesigned the Network Posture panel into a symmetrical 2x2 socket telemetry grid (External WAN, Loopback, Trusted LAN, Unclassified) with a live boundary state dot, proportional distribution bar, and neutral `text-muted` for `Air-gapped · 0 leaks`. Removed redundant floating Sovereign badge.
+- Item 7 (Visual style harmonization): Dark mode configured with neutral soft whites/grays (canvas `#18181b`, rail `#121214`, panels `#27272a`, text `#f4f4f5`, muted `#a1a1aa`) and exactly one soft indigo accent (`#818cf8`) with subtle borders and shadows. Light mode preserved completely intact. Theme persisted via `localStorage` and `prefers-color-scheme`.
+- Dead code cleanup: Cleaned unused imports and dead props across `task.tsx`, `workspace.tsx`, and `App.tsx`.
+- Verification: `npm --prefix frontend run typecheck` (0 errors), `npm --prefix frontend run build` (clean), `pytest backend/tests` (201 passed, 1 skipped), `python scripts/check_contract_sync.py` (15 interfaces, 4 unions).
+
 ### 2026-09-06 — P3 / AI (PRE-MASTER-MERGE BLOCKER FIXES on `integrate/p3-p6`)
 **Changed:**
 - **Fixed a fully broken test suite.** `backend/tests/test_docgen_pptx.py` and
