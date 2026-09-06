@@ -791,7 +791,7 @@ Pin every version. `requirements.txt` exists at T-7 and all six people install f
 ## 5.1 Backend
 
 ```
-python==3.11.x            # 3.12 breaks some OCR wheels; 3.11 is the safe floor
+python==3.12.10           # host backend interpreter; matches backend/requirements-lock.txt
 fastapi==0.115.*
 uvicorn[standard]==0.32.*
 pydantic==2.9.*           # v2 — typed tool signatures depend on it
@@ -845,7 +845,7 @@ matplotlib==3.9.*         # Agg backend, no display
 ## 5.7 Frontend
 
 ```
-node 20 LTS
+node v24.15.0 + npm 11.12.1
 vite@5 + react@18 + typescript
 tailwindcss@3
 lucide-react
@@ -1355,8 +1355,9 @@ ollama pull qwen2.5-coder:3b-instruct-q4_K_M
 docker pull python:3.11-slim
 docker run --rm python:3.11-slim python -c "print('sandbox ok')"
 
-# 4. Python
-python3.11 -m venv .venv && source .venv/bin/activate
+# 4. Host Python — install the pinned project version, Python 3.12.10.
+# The preceding python:3.11-slim commands are for the separate sandbox only.
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r backend/requirements.txt
 
 # 5. Cache the embedding weights NOW

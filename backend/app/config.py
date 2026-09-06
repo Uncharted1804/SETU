@@ -107,6 +107,8 @@ class Settings:
     workspace: Path = REPO_ROOT / "data" / "workspace"
     #: Audit lives OUTSIDE the agent-writable workspace, deliberately.
     audit_path: Path = REPO_ROOT / "logs" / "audit.jsonl"
+    #: Durable conversation history. Also outside the agent-writable workspace.
+    history_path: Path = REPO_ROOT / "data" / "setu_history.sqlite3"
     kb_path: Path = REPO_ROOT / "data" / "chroma"
     kb_corpus: Path = REPO_ROOT / "data" / "kb_corpus"
     templates: Path = REPO_ROOT / "templates"
@@ -190,11 +192,15 @@ def get_settings() -> Settings:
 
     workspace = Path(env.get("SETU_WORKSPACE", str(REPO_ROOT / "data" / "workspace")))
     audit = Path(env.get("SETU_AUDIT_PATH", str(REPO_ROOT / "logs" / "audit.jsonl")))
+    history = Path(
+        env.get("SETU_HISTORY_PATH", str(REPO_ROOT / "data" / "setu_history.sqlite3"))
+    )
 
     return Settings(
         mock_mode=_truthy(env.get("SETU_MOCK_MODE"), True),
         workspace=workspace.resolve(),
         audit_path=audit.resolve(),
+        history_path=history.resolve(),
         kb_path=Path(env.get("SETU_KB_PATH", str(REPO_ROOT / "data" / "chroma"))).resolve(),
         # P5 can point the backend at a dist built elsewhere; the demo box uses
         # the default so `npm run build` output is what gets served.

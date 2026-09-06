@@ -20,7 +20,7 @@ SIH 2026 · Problem statement 26117 · Mangalore Refinery and Petrochemicals Lim
 ## Quickstart — mock mode (no GPU, no Ollama, no Docker)
 
 Mock mode runs the entire application with deterministic fixtures. You need
-Python 3.12 and the dependencies in `backend/requirements-lock.txt`. You do
+Python 3.12.10 and the dependencies in `backend/requirements-lock.txt`. You do
 **not** need a GPU, Ollama, Docker, Tesseract, an embedding download or a
 populated knowledge base.
 

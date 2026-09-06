@@ -1,242 +1,305 @@
-/**
- * SETU workbench.  OWNER: P5.
- *
- * Layout: prompt + execution on the left, proof surfaces on the right.  The
- * MOCK MODE banner is unmissable when the backend is running fixtures, because
- * a demo that cannot tell simulated output from real output is worse than no
- * demo.
- */
+/** SETU conversation orchestration and durable session state. */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import { AuditPanel, ModelRegistryPanel, NetworkPanel } from "./components/proof";
-import { Artifacts, PlanChecklist, RouterBanner, StreamView } from "./components/task";
-import { Panel, Tag } from "./components/common";
-import type { ApprovalRequest, MockScenario, TaskStatus } from "./types";
+import { PlanChecklist, RouterBanner, StreamView } from "./components/task";
+import {
+  ActiveTask,
+  AssistantTurn,
+  ChatComposer,
+  ConversationHeader,
+  EmptyChat,
+  InspectorRail,
+  SessionSidebar,
+  StudioLayout,
+  TaskStateLine,
+  UserTurn,
+  type Theme,
+} from "./components/workspace";
+import type { ApprovalRequest, ArtifactRef, SessionDetail, SessionSummary, TaskStatus } from "./types";
 import { TERMINAL_STATES } from "./types";
 import { useTaskStream } from "./useTaskStream";
 
 export default function App() {
+  // A bright reading surface is the default; the control keeps the existing dark option available.
+  const [theme, setTheme] = useState<Theme>("light");
   const [mockMode, setMockMode] = useState<boolean | null>(null);
   const [version, setVersion] = useState("");
-  const [scenarios, setScenarios] = useState<MockScenario[]>([]);
-  const [scenario, setScenario] = useState<string>("");
-
-  const [text, setText] = useState("Draft an approval note from this inspection report.");
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [activeSession, setActiveSession] = useState<SessionDetail | null>(null);
+  const [text, setText] = useState("");
   const [uploads, setUploads] = useState<string[]>([]);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [status, setStatus] = useState<TaskStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [composerDetached, setComposerDetached] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const previousScrollTop = useRef(0);
 
   const stream = useTaskStream(taskId);
+  const terminal = status ? TERMINAL_STATES.includes(status.state) : false;
+  const taskRunning = Boolean(taskId && (!status || !terminal));
 
   useEffect(() => {
-    void api
-      .health()
-      .then((h) => {
-        setMockMode(h.mock_mode);
-        setVersion(h.version);
-        if (h.mock_mode) void api.scenarios().then(setScenarios).catch(() => setScenarios([]));
-      })
-      .catch(() => setMockMode(null));
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  useEffect(() => {
+    const toggleHistory = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.key !== "[" || event.metaKey || event.ctrlKey || event.altKey || target?.matches("input, textarea, select, [contenteditable='true']")) return;
+      event.preventDefault();
+      setHistoryCollapsed((current) => !current);
+    };
+    window.addEventListener("keydown", toggleHistory);
+    return () => window.removeEventListener("keydown", toggleHistory);
   }, []);
 
-  /** Status is refreshed on every event, so the checklist and approvals follow
-   *  the backend rather than a local guess about what happened. */
+  const refreshSessions = useCallback(async () => {
+    const next = await api.sessions();
+    setSessions(next);
+  }, []);
+
+  const loadCurrentSession = useCallback(async () => {
+    const current = await api.currentSession();
+    setActiveSession(current);
+    if (!current) {
+      setTaskId(null);
+      setStatus(null);
+      return;
+    }
+    const running = [...current.turns].reverse().find((turn) => !TERMINAL_STATES.includes(turn.state));
+    setTaskId(running?.task_id ?? null);
+    setStatus(running?.status ?? null);
+  }, []);
+
+  useEffect(() => {
+    void Promise.all([api.health(), api.sessions(), api.currentSession()])
+      .then(([health, savedSessions, current]) => {
+        setMockMode(health.mock_mode);
+        setVersion(health.version);
+        setSessions(savedSessions);
+        setActiveSession(current);
+        const running = current
+          ? [...current.turns].reverse().find((turn) => !TERMINAL_STATES.includes(turn.state))
+          : undefined;
+        setTaskId(running?.task_id ?? null);
+        setStatus(running?.status ?? null);
+      })
+      .catch((reason) => {
+        setMockMode(null);
+        setError(String(reason));
+      });
+  }, []);
+
   useEffect(() => {
     if (!taskId) return;
     let alive = true;
+    let refreshedTerminal = false;
     const refresh = async () => {
       try {
         const next = await api.task(taskId);
-        if (alive) setStatus(next);
+        if (!alive) return;
+        setStatus(next);
+        if (TERMINAL_STATES.includes(next.state) && !refreshedTerminal) {
+          refreshedTerminal = true;
+          await Promise.all([loadCurrentSession(), refreshSessions()]);
+        }
       } catch {
-        /* task list is bounded; a dropped task simply stops updating */
+        // A historical task may no longer have a live SSE stream; its session snapshot remains.
       }
     };
     void refresh();
-    const timer = setInterval(refresh, 700);
+    const timer = window.setInterval(refresh, terminal ? 2500 : 700);
     return () => {
       alive = false;
-      clearInterval(timer);
+      window.clearInterval(timer);
     };
-  }, [taskId, stream.events.length]);
+  }, [taskId, terminal, stream.events.length, loadCurrentSession, refreshSessions]);
 
   const submit = useCallback(async () => {
+    const taskText = text.trim();
+    if (!taskText || taskRunning) return;
     setError(null);
     setBusy(true);
     try {
-      const created = await api.createTask(text, uploads, scenario || undefined);
+      const created = await api.createTask(taskText, uploads);
+      setText("");
+      setUploads([]);
       setTaskId(created.task_id);
       setStatus(null);
-    } catch (e) {
-      setError(String(e));
+      await Promise.all([loadCurrentSession(), refreshSessions()]);
+      requestAnimationFrame(() => {
+        const node = transcriptRef.current;
+        if (node) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+      });
+    } catch (reason) {
+      setError(String(reason));
     } finally {
       setBusy(false);
     }
-  }, [text, uploads, scenario]);
+  }, [text, uploads, taskRunning, loadCurrentSession, refreshSessions]);
 
-  const onUpload = useCallback(async (files: FileList | null) => {
+  const upload = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
     setBusy(true);
     try {
-      const stored: string[] = [];
-      for (const file of Array.from(files)) {
-        const result = await api.upload(file);
-        stored.push(result.path);
-      }
-      setUploads((prev) => [...prev, ...stored]);
-    } catch (e) {
-      setError(String(e));
+      const stored = await Promise.all(Array.from(files).map((file) => api.upload(file)));
+      setUploads((current) => [...current, ...stored.map((item) => item.path)]);
+    } catch (reason) {
+      setError(String(reason));
     } finally {
       setBusy(false);
     }
   }, []);
 
-  const decide = useCallback(
-    async (approval: ApprovalRequest, approved: boolean) => {
-      if (!taskId) return;
-      setBusy(true);
-      try {
-        await api.approve(taskId, approval.approval_id, approved);
-      } catch (e) {
-        setError(String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [taskId],
-  );
+  const decide = useCallback(async (approval: ApprovalRequest, approved: boolean) => {
+    if (!taskId) return;
+    setBusy(true);
+    try {
+      await api.approve(taskId, approval.approval_id, approved);
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy(false);
+    }
+  }, [taskId]);
 
-  const terminal = status ? TERMINAL_STATES.includes(status.state) : false;
+  const beginNewSession = useCallback(async () => {
+    setBusy(true);
+    try {
+      const fresh = await api.newSession();
+      setActiveSession(fresh);
+      setTaskId(null);
+      setStatus(null);
+      setText("");
+      setUploads([]);
+      setHistoryOpen(false);
+      await refreshSessions();
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy(false);
+    }
+  }, [refreshSessions]);
+
+  const selectSession = useCallback(async (sessionId: string) => {
+    setBusy(true);
+    try {
+      const selected = await api.activateSession(sessionId);
+      setActiveSession(selected);
+      const running = [...selected.turns].reverse().find((turn) => !TERMINAL_STATES.includes(turn.state));
+      setTaskId(running?.task_id ?? null);
+      setStatus(running?.status ?? null);
+      setHistoryOpen(false);
+      setError(null);
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const onTranscriptScroll = () => {
+    const node = transcriptRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.clientHeight - node.scrollTop;
+    const scrollingUp = node.scrollTop < previousScrollTop.current;
+    if (distanceFromBottom < 72) setComposerDetached(false);
+    else if (scrollingUp) setComposerDetached(true);
+    previousScrollTop.current = node.scrollTop;
+  };
+
+  const artifacts = useMemo(() => {
+    const collected = new Map<string, ArtifactRef>();
+    for (const turn of activeSession?.turns ?? []) {
+      for (const artifact of turn.status?.artifacts ?? []) collected.set(artifact.artifact_id, artifact);
+    }
+    for (const artifact of status?.artifacts ?? []) collected.set(artifact.artifact_id, artifact);
+    return [...collected.values()];
+  }, [activeSession, status]);
 
   return (
-    <div className="min-h-full">
-      {mockMode && (
-        <div className="border-b border-warn/40 bg-warn/10 px-4 py-1.5 text-center text-xs font-semibold tracking-wide text-warn">
-          MOCK MODE — agents, retrieval and sandbox execution return deterministic
-          fixtures. No model is loaded and no container is started.
-        </div>
-      )}
-
-      <header className="flex items-center justify-between border-b border-edge px-4 py-3">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-lg font-semibold tracking-tight text-slate-100">SETU</h1>
-          <span className="text-xs text-muted">
-            sovereign on-premise agentic workbench
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {mockMode === false && <Tag tone="good">real mode</Tag>}
-          {mockMode === null && <Tag tone="bad">backend unreachable</Tag>}
-          <span className="font-mono text-[10px] text-muted">{version}</span>
-        </div>
-      </header>
-
-      <main className="grid grid-cols-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-3">
-          <Panel title="Task">
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={3}
-              className="w-full resize-y rounded border border-edge bg-ink px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-accent"
-              placeholder="Describe the task…"
+    <div className="app-root">
+      {mockMode && <div className="mock-ribbon">SIMULATED ENVIRONMENT · outputs are deterministic fixtures</div>}
+      <StudioLayout
+        history={
+          <SessionSidebar
+            sessions={sessions}
+            activeId={activeSession?.session_id ?? null}
+            busy={busy}
+            collapsed={historyCollapsed}
+            onNew={() => void beginNewSession()}
+            onSelect={(id) => void selectSession(id)}
+            onToggle={() => setHistoryCollapsed((current) => !current)}
+          />
+        }
+        conversation={
+          <>
+            <ConversationHeader
+              session={activeSession}
+              mockMode={mockMode}
+              version={version}
+              theme={theme}
+              onThemeChange={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+              onOpenHistory={() => setHistoryOpen(true)}
+              onOpenInspector={() => setInspectorOpen(true)}
             />
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <label className="cursor-pointer rounded border border-edge px-2 py-1 text-xs text-slate-300 hover:border-accent">
-                Attach file
-                <input
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => void onUpload(e.target.files)}
-                />
-              </label>
-
-              {scenarios.length > 0 && (
-                <select
-                  value={scenario}
-                  onChange={(e) => setScenario(e.target.value)}
-                  className="rounded border border-edge bg-ink px-2 py-1 text-xs text-slate-300"
-                >
-                  <option value="">scenario: auto-select</option>
-                  {scenarios.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.key} — {s.title}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              <button
-                onClick={() => void submit()}
-                disabled={busy || !text.trim()}
-                className="rounded bg-accent/20 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/30 disabled:opacity-40"
-              >
-                Run
-              </button>
-
-              {taskId && !terminal && (
-                <button
-                  onClick={() => void api.cancel(taskId)}
-                  className="rounded border border-edge px-2 py-1 text-xs text-muted hover:border-bad hover:text-bad"
-                >
-                  Cancel
-                </button>
-              )}
-
-              {status && (
-                <Tag
-                  tone={
-                    status.state === "completed"
-                      ? "good"
-                      : status.state === "needs_human_review" || status.state === "rejected"
-                        ? "warn"
-                        : status.state === "failed"
-                          ? "bad"
-                          : "accent"
-                  }
-                >
-                  {status.state}
-                </Tag>
-              )}
+            <div className="transcript" ref={transcriptRef} onScroll={onTranscriptScroll}>
+              {!activeSession?.turns.length && <EmptyChat />}
+              {activeSession?.turns.map((turn) => (
+                <div className="thread-pair" key={turn.task_id}>
+                  <UserTurn text={turn.user_text} attachments={turn.file_paths} timestamp={turn.created_at} />
+                  {turn.assistant_text && <AssistantTurn text={turn.assistant_text} timestamp={turn.updated_at} />}
+                  {turn.task_id === taskId && (
+                    <ActiveTask>
+                      <TaskStateLine status={status} terminal={terminal} onCancel={() => void api.cancel(turn.task_id)} />
+                      <RouterBanner decision={status?.router_decision ?? null} />
+                      <details
+                        className="work-disclosure"
+                        open={Boolean(status?.pending_approval && !status.pending_approval.decided) || undefined}
+                      >
+                        <summary>
+                          <span>Plan</span>
+                          <span>{status?.plan?.steps.length ?? 0} steps · {status?.iterations_used ?? 0}/{status?.max_iterations ?? 5}</span>
+                        </summary>
+                        <div className="work-disclosure-body">
+                          <PlanChecklist status={status} onDecision={decide} busy={busy} />
+                        </div>
+                      </details>
+                      <StreamView events={stream.events} connected={stream.connected} error={stream.error} />
+                    </ActiveTask>
+                  )}
+                </div>
+              ))}
             </div>
-
-            {uploads.length > 0 && (
-              <ul className="mt-2 space-y-0.5">
-                {uploads.map((path) => (
-                  <li key={path} className="font-mono text-[10px] text-muted">
-                    {path}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {error && <p className="mt-2 text-xs text-bad">{error}</p>}
-          </Panel>
-
-          <RouterBanner decision={status?.router_decision ?? null} />
-
-          {status?.state === "needs_human_review" && (
-            <div className="rounded-lg border border-bad/50 bg-bad/5 px-3 py-2 text-xs text-bad">
-              Needs human review — the system did not finalise this task. A person makes
-              the call.
-            </div>
-          )}
-
-          <PlanChecklist status={status} onDecision={decide} busy={busy} />
-          <StreamView events={stream.events} connected={stream.connected} error={stream.error} />
-          <Artifacts taskId={taskId} artifacts={status?.artifacts ?? []} />
-        </div>
-
-        <div className="space-y-3">
-          <NetworkPanel />
-          <ModelRegistryPanel />
-          <AuditPanel />
-        </div>
-      </main>
+            <ChatComposer
+              text={text}
+              attachments={uploads}
+              artifacts={artifacts}
+              busy={busy}
+              disabled={taskRunning}
+              error={error}
+              detached={composerDetached}
+              onTextChange={setText}
+              onUpload={(files) => void upload(files)}
+              onRemoveAttachment={(path) => setUploads((current) => current.filter((item) => item !== path))}
+              onSubmit={() => void submit()}
+            />
+          </>
+        }
+        inspector={<InspectorRail collapsed={inspectorCollapsed} onToggle={() => setInspectorCollapsed((current) => !current)} />}
+        historyOpen={historyOpen}
+        inspectorOpen={inspectorOpen}
+        historyCollapsed={historyCollapsed}
+        inspectorCollapsed={inspectorCollapsed}
+        closePanels={() => { setHistoryOpen(false); setInspectorOpen(false); }}
+      />
     </div>
   );
 }

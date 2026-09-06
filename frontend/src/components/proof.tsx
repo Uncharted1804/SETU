@@ -43,7 +43,7 @@ export function NetworkPanel() {
       }
     };
     void poll();
-    const timer = setInterval(poll, 2000);
+    const timer = setInterval(poll, 500);
     return () => {
       alive = false;
       clearInterval(timer);

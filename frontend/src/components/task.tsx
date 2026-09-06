@@ -20,16 +20,15 @@ import { Empty, Panel, PlainText, SimulatedTag, Tag } from "./common";
 export function RouterBanner({ decision }: { decision: RouterDecision | null }) {
   if (!decision) {
     return (
-      <div className="rounded-lg border border-edge bg-panel px-3 py-2 text-xs text-muted">
+      <div className="route-line text-xs text-muted">
         no routing decision yet
       </div>
     );
   }
   return (
-    <div className="rounded-lg border border-accent/40 bg-accent/5 px-3 py-2">
+    <div className="route-line">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <span className="text-muted">routed to</span>
-        <span className="font-mono font-semibold text-accent">{decision.model}</span>
+        <span className="text-muted">workflow selected</span>
         <Tag tone="accent">{decision.agent}</Tag>
         <span className="text-muted">·</span>
         <span className="text-slate-300">{decision.reason}</span>
@@ -198,7 +197,7 @@ function eventLine(event: SetuEvent): { label: string; body: string; tone: "neut
     case "route":
       return {
         label: "routed",
-        body: `${d.agent} → ${d.model} (${d.rule_id})`,
+        body: `${d.agent} workflow selected (${d.rule_id})`,
         tone: "accent",
         sim: false,
       };

@@ -120,6 +120,9 @@ class TaskEnvelope(BaseModel):
     text: str
     file_paths: list[str] = Field(default_factory=list)
     user: str = "local"
+    #: Bounded transcript from earlier turns in this session. The router still
+    #: routes on `text`; a real planner may use this as conversation context.
+    conversation_context: str = ""
 
     @field_validator("file_paths")
     @classmethod

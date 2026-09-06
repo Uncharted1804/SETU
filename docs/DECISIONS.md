@@ -44,12 +44,14 @@ R5 — "adding a model is a config change" — is only true if this holds.
 
 ---
 
-### D-003 — Python 3.12, not 3.11
+### D-003 — Host Python 3.12.10; sandbox Python 3.11
 
-**Ambiguity.** §5.1 pins Python 3.11. The existing `.venv` is 3.12.10 and
-`requirements-lock.txt` was pip-compiled for 3.12.
+**Ambiguity.** §5.1 formerly pinned Python 3.11, while
+`requirements-lock.txt` was pip-compiled for Python 3.12.10.
 
-**Decision.** Keep 3.12 on the host. The sandbox image stays Python 3.11.
+**Decision.** Python 3.12.10 is the single source of truth for the host backend
+and virtual environment. The sandbox image stays Python 3.11 as the explicit,
+separate Docker-runtime exception.
 
 **Why.** Regenerating a hash-pinned offline lockfile against a different
 interpreter is a real risk for no benefit; nothing in the stack needs 3.11. The
