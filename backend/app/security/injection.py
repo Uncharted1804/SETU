@@ -26,7 +26,7 @@ red banner in the UI and never reaches a model prompt un-wrapped):
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from typing import Any, Iterable
 
 from ..contracts import Chunk, ChunkMetadata
 
@@ -108,3 +108,71 @@ SYSTEM_DATA_RULE = (
 
 def blank_metadata(source_file: str, page: int, chunk_id: str) -> ChunkMetadata:
     return ChunkMetadata(source_file=source_file, page=page, chunk_id=chunk_id)
+
+
+def screen_findings(findings: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Same tripwire, second entry point. Returns (clean, flagged)."""
+    clean: list[dict] = []
+    flagged: list[dict] = []
+    for f in findings:
+        text = f.get("text", "") if isinstance(f, dict) else getattr(f, "text", "")
+        hits = scan(text)
+        if hits:
+            flagged_copy = dict(f) if isinstance(f, dict) else f.model_dump()
+            flagged_copy["trust_level"] = "quarantined"
+            flagged_copy["injection_flags"] = hits
+            flagged.append(flagged_copy)
+        else:
+            clean.append(f)
+    return clean, flagged
+
+
+def wrap_finding(finding: dict | Any) -> str:
+    """<extracted_finding id=".." page=".." trust="untrusted">..</extracted_finding>"""
+    if isinstance(finding, dict):
+        f_id = finding.get("id", "unknown")
+        page = finding.get("page", 1)
+        text = finding.get("text", "")
+        trust = finding.get("trust_level", "untrusted")
+    else:
+        f_id = getattr(finding, "id", "unknown")
+        page = getattr(finding, "page", 1)
+        text = getattr(finding, "text", "")
+        trust = getattr(finding, "trust_level", "untrusted")
+    safe = (text or "").replace("</extracted_finding>", "[/tag-stripped]")
+    return (
+        f'<extracted_finding id="{f_id}" page="{page}" trust="{trust}">\n'
+        f"{safe}\n"
+        f"</extracted_finding>"
+    )
+
+
+def build_findings_block(findings: Iterable[dict | Any]) -> str:
+    """Render clean findings into the findings region of a prompt."""
+    parts = [wrap_finding(f) for f in findings]
+    return "\n\n".join(parts)
+
+
+def assert_no_unwrapped(prompt: str, texts: list[str]) -> None:
+    """Test helper: every untrusted text appears ONLY inside a tag region."""
+    stripped = re.sub(
+        r"<retrieved_document_content\b[^>]*>.*?</retrieved_document_content>",
+        "",
+        prompt,
+        flags=re.DOTALL,
+    )
+    stripped = re.sub(
+        r"<extracted_finding\b[^>]*>.*?</extracted_finding>",
+        "",
+        stripped,
+        flags=re.DOTALL,
+    )
+    for text in texts:
+        if not text or not text.strip():
+            continue
+        needle = text.strip()
+        if needle in stripped:
+            raise AssertionError(
+                f"Untrusted text found outside tagged region:\n{needle[:100]}"
+            )
+

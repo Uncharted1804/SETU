@@ -350,7 +350,14 @@ async def list_artifacts(request: Request, task_id: str):
 
 @router.get("/tasks/{task_id}/artifacts/{artifact_id}")
 async def download_artifact(request: Request, task_id: str, artifact_id: str):
-    """Task-scoped lookup by opaque id.  A client never supplies a path."""
+    """Task-scoped lookup by opaque id.  A client never supplies a path.
+
+    Resolution is against THIS TASK's root, not the shared workspace, because
+    `ToolContext.register_artifact` records `ref.path` relative to the task
+    root. Resolving against the workspace would look up the wrong file, and
+    would also mean a path recorded by one task could be reached while serving
+    another.
+    """
     service = _svc(request)
     ref = service.store.artifact(task_id, artifact_id)
     if ref is None:
@@ -359,15 +366,14 @@ async def download_artifact(request: Request, task_id: str, artifact_id: str):
     if ref is None:
         raise HTTPException(status_code=404, detail="no such artifact for this task")
     try:
-        path = service.settings.workspace / ref.path
         from ..security.paths import jail
+        from ..tools.base import task_root
 
-        resolved = jail(ref.path, service.settings.workspace)
+        resolved = jail(ref.path, task_root(service.settings.workspace, task_id))
     except PathEscape as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if not resolved.is_file():
         raise HTTPException(status_code=410, detail="artifact is no longer on disk")
-    _ = path
     return FileResponse(str(resolved), media_type=ref.media_type, filename=ref.name)
 
 
@@ -377,17 +383,41 @@ async def download_artifact(request: Request, task_id: str, artifact_id: str):
 
 
 @router.post("/upload")
-async def upload(request: Request, file: UploadFile = File(...), session_id: Optional[str] = Form(default=None)):
+async def upload(
+    request: Request,
+    response: Response,
+    file: UploadFile = File(...),
+    session_id: Optional[str] = Form(default=None),
+):
     """Uploads land in workspace/uploads under a SERVER-CONTROLLED name.
 
     The client's filename is sanitised and prefixed; it is never used as a path
     component, so an upload called "../../evil.txt" cannot escape - and the jail
     call below is the second line of defence, not the first.
+
+    This is a STAGING area, shared across sessions and outside any task root.
+    The file is not usable until a task claims it: `create_task` copies it into
+    that task's own root and rewrites the path. Ownership is recorded here so
+    that claim can be refused.
     """
     service = _svc(request)
     raw = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="upload exceeds %d bytes" % MAX_UPLOAD_BYTES)
+
+    from ..security.upload_scan import scan_upload
+    result = scan_upload(file.filename or "upload", raw)
+    if not result.allowed:
+        raise HTTPException(status_code=415, detail=result.reason)
+
+    # An upload is claimable only by its active, server-issued session.  A
+    # caller may supply an existing session id (for an explicit API flow), but
+    # an absent or unknown value must never be recorded as an owner that task
+    # creation will subsequently replace with a different generated id.
+    resolved_session_id = _active_session(request, session_id)
+    if resolved_session_id is None:
+        resolved_session_id = new_session_id()
+        service.history.create_session(resolved_session_id)
 
     storage_name = safe_storage_name(file.filename or "upload", prefix=secrets.token_hex(3) + "_")
     rel = "uploads/" + storage_name
@@ -399,12 +429,17 @@ async def upload(request: Request, file: UploadFile = File(...), session_id: Opt
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(raw)
+    # Record who staged this. create_task refuses a file_paths entry that was
+    # never staged or was staged by another session, so this is the point at
+    # which session ownership stops being decorative.
+    service.uploads.stage(rel, resolved_session_id)
+    _set_session_cookie(request, response, resolved_session_id)
     return {
         "path": rel,
         "original_name": file.filename,
         "stored_name": storage_name,
         "size_bytes": len(raw),
-        "session_id": session_id,
+        "session_id": resolved_session_id,
     }
 
 

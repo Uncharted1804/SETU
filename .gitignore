@@ -1,29 +1,78 @@
 # ---- Python ----
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
+.installed.cfg
+*.egg
+*.whl
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+parts/
+var/
+sdist/
+wheels/
+pip-wheel-metadata/
+
+# Virtual Environments
 .venv/
+.venv*/
 venv/
 env/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing, Coverage & Linters
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
+coverage.xml
+*.cover
 htmlcov/
+.hypothesis/
+.tox/
+.nox/
 
-# ---- Node / frontend ----
+# Caching
+.cache/
+__pypackages__/
+
+# ---- Node / Frontend ----
 node_modules/
+dist/
 frontend/dist/
+.vite/
 frontend/.vite/
 *.tsbuildinfo
+.eslintcache
+.stylelintcache
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# ---- Secrets and local config ----
+# ---- Secrets and Local Config ----
 .env
 .env.*
 !.env.example
+credentials.json
+token.json
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
 
-# ---- Model weights and vendored binaries (GB-scale, staged out of band) ----
+# ---- Model Weights and Large Binaries ----
 vendor/
 *.gguf
 *.safetensors
@@ -31,30 +80,78 @@ vendor/
 *.tar
 models/
 
-# ---- Runtime state: uploads, generated artifacts, logs, vector store ----
+# ---- Runtime State: Uploads, Logs, Vector Stores & Databases ----
 # The agent's workspace is runtime data, not source. Keep the directory in git
 # via .gitkeep so the path jail has somewhere to resolve to on a fresh clone.
 data/workspace/*
 !data/workspace/.gitkeep
 data/chroma/
 data/setu_history.sqlite3*
+chroma/
+.chroma/
 logs/
+*.log
 *.jsonl
+
+# SQLite temporary & journal files
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-shm
+*.sqlite3-wal
+*.db
+*.db-shm
+*.db-wal
 
 # Small synthetic fixtures ARE committed - they are how a teammate reproduces a
 # demo beat without the real assets.
 !data/demo_assets/**
 
-# ---- Editors / OS ----
+# ---- Credentials and Intermediates ----
+.tmp/*
+!.tmp/.gitkeep
+tmp/
+temp/
+scratch/
+.scratch/
+
+# ---- Editors and OS ----
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
+.history/
+*.sublime-project
+*.sublime-workspace
+
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
 Thumbs.db
 desktop.ini
+ehthumbs.db
+ehthumbs_vista.db
+$RECYCLE.BIN/
+*.lnk
 
-# ---- Credentials and Intermediates ----
-.tmp/
-credentials.json
-token.json
+# Linux
+.fuse_hidden*
+.directory
+
+# ---- AI Tooling, Local Agent State & Graphify ----
+.claude/
+.cursor/
+.gemini/
 graphify-out/
+.graphify/
+graphify/
+
+P2_VISION_GUIDE.md
+*_crop.png
+*_pre.png
+

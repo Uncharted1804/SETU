@@ -23,6 +23,7 @@ httpx
 pymupdf              # digital PDF text + page rasterization
 python-docx          # DOCX read and template-based artifact generation
 openpyxl             # XLSX read/write, host side
+python-pptx          # PPTX generation
 pillow               # image handling before OCR/VLM
 
 # --- Document intelligence, tier D2: OCR ---

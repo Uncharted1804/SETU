@@ -20,7 +20,9 @@ teammate with neither installed can still run the whole app.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional
+import os
+from pathlib import Path
+from typing import Any, Iterable, Optional
 
 from ..config import Settings
 from ..contracts import Chunk, ChunkMetadata, ErrorCode, KbSearchArgs
@@ -28,8 +30,8 @@ from .base import ToolContext, ToolError, optional_import
 
 CHUNK_CHARS = 800
 CHUNK_OVERLAP = 150
-DEFAULT_TOP_K = 5
-DISTANCE_CUTOFF = 0.75
+DEFAULT_TOP_K = 3
+DISTANCE_CUTOFF = 0.40
 COLLECTION = "setu_corpus"
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 
@@ -88,7 +90,8 @@ class KnowledgeBase:
         self._collection = None
         self._embedder = None
 
-    def _ensure(self):
+    def _open_collection(self):
+        """Open the configured persistent collection without changing its data."""
         if self._collection is not None:
             return self._collection
         chromadb = optional_import("chromadb", owner="P3", purpose="knowledge base")
@@ -97,6 +100,38 @@ class KnowledgeBase:
             COLLECTION, metadata={"hnsw:space": "cosine"}
         )
         return self._collection
+
+    def _corpus_documents(self) -> list[tuple[str, int, str]]:
+        """Read the configured corpus in a deterministic order.
+
+        Only the corpus directory is authoritative. A fresh machine must not
+        depend on a copied Chroma directory or a manually remembered CLI step.
+        """
+        corpus = Path(self.settings.kb_corpus)
+        if not corpus.is_dir():
+            raise ToolError(
+                ErrorCode.NOT_FOUND,
+                "knowledge base corpus is missing at %s" % corpus,
+            )
+
+        docs = [
+            (path.name, 1, path.read_text(encoding="utf-8"))
+            for path in sorted(corpus.glob("*.md"))
+            if path.is_file() and path.stat().st_size > 0
+        ]
+        if not docs:
+            raise ToolError(
+                ErrorCode.NOT_FOUND,
+                "knowledge base corpus at %s contains no non-empty Markdown documents" % corpus,
+            )
+        return docs
+
+    def _ensure(self):
+        """Return a collection, bootstrapping an empty one from the corpus once."""
+        collection = self._open_collection()
+        if collection.count() == 0:
+            self._ingest_documents(collection, self._corpus_documents())
+        return collection
 
     def _embed(self, texts: list[str]) -> list[list[float]]:
         if self._embedder is None:
@@ -107,21 +142,58 @@ class KnowledgeBase:
             self._embedder = st.SentenceTransformer(EMBED_MODEL, device="cpu")
         return [list(map(float, v)) for v in self._embedder.encode(texts)]
 
-    def ingest(self, docs: Iterable[tuple[str, int, str]]) -> int:
-        """NOT IMPLEMENTED - P3.
+    def _ingest_documents(self, collection, docs: Iterable[tuple[str, int, str]]) -> int:
+        """Ingest documents into an already-open Chroma collection.
 
-        `docs` is an iterable of (source_file, page, text).  Implementation must:
-          - chunk with chunk_text()
-          - run security.injection.scan() on each chunk BEFORE indexing
-          - quarantine flagged chunks and surface them, never silently index
-          - store ChunkMetadata fields verbatim so citations can be rendered
-
-        Acceptance (P3): `kb_search("hydrotest acceptance criteria")` over
-        data/kb_corpus returns >= 3 chunks from the expected SOP with distance
-        below the calibrated cutoff, and the injected demo PDF produces exactly
-        one quarantined chunk.
+        `docs` is an iterable of (source_file, page, text).
+        Chunks each doc with chunk_text(), scans with scan() before indexing,
+        quarantines flagged chunks, and stores metadata (chunk_id, source_file, page, trust_level).
         """
-        raise NotImplementedError("P3 owns KB ingestion (tools/kb.py::ingest)")
+        from ..security.injection import scan
+
+        ids: list[str] = []
+        documents: list[str] = []
+        metadatas: list[dict[str, Any]] = []
+
+        for source_file, page, text in docs:
+            base_name = os.path.basename(source_file)
+            doc_id = os.path.splitext(base_name)[0]
+            pieces = chunk_text(text)
+            for i, piece in enumerate(pieces):
+                chunk_id = f"{doc_id}#c{i:02d}"
+                flags = scan(piece)
+                trust_level = "quarantined" if flags else "untrusted"
+                ids.append(chunk_id)
+                documents.append(piece)
+                metadatas.append({
+                    "chunk_id": chunk_id,
+                    "source_file": base_name,
+                    "page": int(page),
+                    "trust_level": trust_level,
+                })
+
+        if not documents:
+            return 0
+
+        # Batch embed and upsert
+        batch_size = 64
+        for i in range(0, len(documents), batch_size):
+            b_docs = documents[i : i + batch_size]
+            b_ids = ids[i : i + batch_size]
+            b_metas = metadatas[i : i + batch_size]
+            b_embeddings = self._embed(b_docs)
+            collection.upsert(
+                ids=b_ids,
+                embeddings=b_embeddings,
+                documents=b_docs,
+                metadatas=b_metas,
+            )
+
+        return len(documents)
+
+    def ingest(self, docs: Iterable[tuple[str, int, str]]) -> int:
+        """Ingest explicit documents without implicitly adding the full corpus."""
+        return self._ingest_documents(self._open_collection(), docs)
 
     def search(self, query: str, k: int = DEFAULT_TOP_K) -> list[Chunk]:
         collection = self._ensure()
@@ -163,7 +235,7 @@ _KB_SINGLETON: Optional[KnowledgeBase] = None
 def kb_search(args: KbSearchArgs, ctx: ToolContext) -> dict:
     """Real-mode handler.  The mock adapter lives in app/mocks/adapters.py."""
     global _KB_SINGLETON
-    if _KB_SINGLETON is None:
+    if _KB_SINGLETON is None or _KB_SINGLETON.settings.kb_path != ctx.settings.kb_path:
         _KB_SINGLETON = KnowledgeBase(ctx.settings)
     chunks = _KB_SINGLETON.search(args.query, args.k)
     from ..security.injection import screen_chunks
@@ -175,3 +247,32 @@ def kb_search(args: KbSearchArgs, ctx: ToolContext) -> dict:
         "quarantined": [c.model_dump() for c in quarantined],
         "count": len(clean),
     }
+
+
+if __name__ == "__main__":
+    import glob
+    import sys
+    from pathlib import Path
+
+    backend_dir = str(Path(__file__).resolve().parent.parent.parent)
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+
+    from app.config import get_settings
+    from app.security.injection import scan
+
+    settings = get_settings()
+    kb = KnowledgeBase(settings)
+    corpus_dir = Path(settings.kb_corpus)
+    files = sorted(glob.glob(str(corpus_dir / "*.md")))
+    docs = []
+    quarantined_count = 0
+    for f in files:
+        with open(f, "r", encoding="utf-8") as fp:
+            content = fp.read()
+            docs.append((os.path.basename(f), 1, content))
+            for p in chunk_text(content):
+                if scan(p):
+                    quarantined_count += 1
+    total = kb.ingest(docs)
+    print(f"[kb] Ingestion complete: {len(files)} documents, {total} chunks ({quarantined_count} quarantined).")

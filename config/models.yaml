@@ -169,6 +169,6 @@ routing:
   # Calibrate these on a labelled query set (blueprint F14). Do NOT ship a
   # universal cosine cutoff -- similarity scales vary by embedding model.
   retrieval:
-    top_k: null              # set from data/kb_eval results
-    distance_cutoff: null    # set from data/kb_eval results
-    calibrated_on: null      # e.g. "data/kb_eval/queries.jsonl, 2026-09-01"
+    top_k: 3
+    distance_cutoff: 0.40
+    calibrated_on: "data/kb_corpus/_meta/test_queries.md, 2026-09-06"

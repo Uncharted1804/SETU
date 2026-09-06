@@ -1,0 +1,25 @@
+[ATTEMPT 1]
+CODE EXECUTED:
+import pandas as pd
+df = pd.read_excel("data/demo_assets/sensor_readings.xlsx")
+# Fails because sheet name is not specified and it tries to process mixed text/numbers
+mean_flow = df["Flow_Rate_GPM (FT-205)"].mean()
+
+RESULT:
+stderr: TypeError: unsupported operand type(s) for +: 'float' and 'str'
+exit_code: 1
+
+[FEEDBACK PROVIDED]
+"The Flow_Rate_GPM column contains string values like 'SENSOR_ERROR'. You must convert to numeric, coercing errors to NaN, before calculating the mean."
+
+[ATTEMPT 2]
+CODE EXECUTED:
+import pandas as pd
+df = pd.read_excel("data/demo_assets/sensor_readings.xlsx", sheet_name="Readings", skiprows=1)
+df["Flow_Rate_GPM (FT-205)"] = pd.to_numeric(df["Flow_Rate_GPM (FT-205)"], errors="coerce")
+mean_flow = df["Flow_Rate_GPM (FT-205)"].mean()
+print(f"Mean Flow: {mean_flow:.2f}")
+
+RESULT:
+stdout: Mean Flow: 425.10
+exit_code: 0
