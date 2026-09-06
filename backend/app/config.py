@@ -114,6 +114,7 @@ class Settings:
     templates: Path = REPO_ROOT / "templates"
     models_yaml: Path = REPO_ROOT / "config" / "models.yaml"
     frontend_dist: Path = REPO_ROOT / "frontend" / "dist"
+    hf_cache_path: Path = REPO_ROOT / "vendor" / "models" / "hf_cache"
 
     # --- model serving ------------------------------------------------------
     ollama_host: str = "127.0.0.1:11434"
@@ -206,6 +207,9 @@ def get_settings() -> Settings:
         # the default so `npm run build` output is what gets served.
         frontend_dist=Path(
             env.get("SETU_FRONTEND_DIST", str(REPO_ROOT / "frontend" / "dist"))
+        ).resolve(),
+        hf_cache_path=Path(
+            env.get("SETU_HF_CACHE", str(REPO_ROOT / "vendor" / "models" / "hf_cache"))
         ).resolve(),
         ollama_host=host,
         ollama_timeout_s=float(env.get("SETU_OLLAMA_TIMEOUT", "120")),

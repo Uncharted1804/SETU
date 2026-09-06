@@ -569,6 +569,33 @@ UI refinement (2026-09-06):
 - Re-verified `npm run typecheck`, `npm run build`, backend tests (201 passed,
   1 skipped), and contract sync (15 interfaces and 4 unions).
 
+### 2026-09-06 — Antigravity (P1/P3/P4 offline embedding and LAN fix)
+
+Changed:
+- Fixed `kb_search` offline failure (`OSError: We couldn't connect to 'https://huggingface.co'`) by binding embedding cache to `vendor/models/hf_cache` via `Settings.hf_cache_path` and `backend/app/tools/kb.py`.
+- Configured air-gapped environment flags in `scripts/launch_lan.ps1`: `HF_HUB_DISABLE_TELEMETRY=1`, `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`.
+- Verified vision agent confidence threshold restored to `0.70`.
+- Verified `<generated_code>` placeholder resolution in coding/executor pipeline.
+
+Verification:
+- Tested offline SentenceTransformer loading with `HF_HUB_OFFLINE=1`: SUCCESS.
+- Ran test suite: `backend/tests/test_kb.py` and `backend/tests/test_kb_calibration.py` (17 passed in 13.5s).
+
+### 2026-09-06 — Antigravity (P1 planner retrieval-synthesis pairing fix)
+
+Changed:
+- Resolved issue where knowledge base search questions terminated with `"kb_search returned a result"` without answering the user.
+- Updated `_system_prompt()` in `backend/app/orchestration/planner.py` to clarify that retrieval tools (`kb_search`, `read_file`) only fetch raw context and do not formulate user-facing answers; questions/analysis requiring data retrieval must be followed by an agent step (`reasoning` or `coding`).
+- Added defensive safeguard in `ModelPlanner.propose()`: if a plan contains data-retrieval tools with no agent step and no deliverable generator, automatically append a `reasoning` step to synthesize the findings and answer the question.
+- Added unit test `test_retrieval_only_plan_appends_reasoning_synthesis_step` in `backend/tests/test_planner.py`.
+
+Verification:
+- Planner tests: 26 passed, 2 skipped in 1.31s.
+- Live model check (`SETU_MOCK_MODE=0`): Proposed 2-step plan: (1) `tool: kb_search` -> (2) `agent: reasoning` ("Analyze the retrieved standards to determine the minimum holding period and acceptable pressure drop").
+- Full backend suite: 430 passed, 10 skipped in 46.30s.
+
+
+
 > **Before modifying ANY code:**
 > 1. Read `AI_onboarding.md` completely.
 > 2. Read applicable repository AI instructions (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`).

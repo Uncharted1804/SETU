@@ -226,6 +226,9 @@ if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
 $env:SETU_TRUSTED_SUBNET = $subnet.Cidr
 $env:SETU_MOCK_MODE = "0"
 $env:OLLAMA_HOST = "127.0.0.1:11434"
+$env:HF_HUB_DISABLE_TELEMETRY = "1"
+$env:HF_HUB_OFFLINE = "1"
+$env:TRANSFORMERS_OFFLINE = "1"
 Remove-Item Env:SETU_DEV_MODE -ErrorAction SilentlyContinue
 Remove-Item Env:SETU_DEV_ORIGINS -ErrorAction SilentlyContinue
 

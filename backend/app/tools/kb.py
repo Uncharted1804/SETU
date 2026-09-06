@@ -24,9 +24,11 @@ import os
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from ..config import Settings
+from ..config import REPO_ROOT, Settings
 from ..contracts import Chunk, ChunkMetadata, ErrorCode, KbSearchArgs
 from .base import ToolContext, ToolError, optional_import
+
+DEFAULT_HF_CACHE = REPO_ROOT / "vendor" / "models" / "hf_cache"
 
 CHUNK_CHARS = 800
 CHUNK_OVERLAP = 150
@@ -139,7 +141,11 @@ class KnowledgeBase:
                 "sentence_transformers", owner="P3", purpose="CPU embeddings"
             )
             # device="cpu" is deliberate; see the module docstring.
-            self._embedder = st.SentenceTransformer(EMBED_MODEL, device="cpu")
+            cache_dir = getattr(self.settings, "hf_cache_path", DEFAULT_HF_CACHE)
+            cache_folder = str(cache_dir) if cache_dir and Path(cache_dir).exists() else None
+            self._embedder = st.SentenceTransformer(
+                EMBED_MODEL, device="cpu", cache_folder=cache_folder
+            )
         return [list(map(float, v)) for v in self._embedder.encode(texts)]
 
     def _ingest_documents(self, collection, docs: Iterable[tuple[str, int, str]]) -> int:

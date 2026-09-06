@@ -255,7 +255,13 @@ class ModelPlanner:
             "    Any other name is rejected before the step runs.",
             "  * For agents ('vision', 'reasoning', 'coding'), `kind` MUST be 'agent'.",
             "  * For tools ('kb_search', 'read_file', etc.), `kind` MUST be 'tool'.",
-            "  * Propose between 1 and %d steps. Fewer is better." % self.MAX_STEPS,
+            "  * Tools (such as 'kb_search', 'read_file', 'list_dir') ONLY retrieve raw data or files;",
+            "    they do NOT write answers or communicate explanations to the user.",
+            "  * Agents ('reasoning', 'coding', 'vision') synthesize findings, answer questions, and draft deliverables.",
+            "  * Whenever a task asks a question, requests information, or requires analysis/synthesis, you MUST",
+            "    schedule an agent step (e.g. 'reasoning') after data retrieval ('kb_search' or 'read_file') so the agent",
+            "    can synthesize the retrieved context and formulate the answer for the user.",
+            "  * Propose between 1 and %d steps." % self.MAX_STEPS,
             "  * `args` must match that tool's argument schema.",
             "  * If write_file or docgen content depends on a prior agent step, leave `content`",
             "    empty or use '<content>'; it will automatically be populated from that agent's output.",
@@ -436,6 +442,25 @@ class ModelPlanner:
                 "the iteration cap." % (len(raw_steps), self.MAX_STEPS)
             )
         steps = [self._to_step(raw, n) for n, raw in enumerate(raw_steps, start=1)]
+
+        # Defensive safeguard: if the plan contains retrieval tools (e.g. kb_search, read_file)
+        # but contains NO agent step and NO deliverable generator (write_file, docgen, sheet_op),
+        # append a reasoning agent step so the user receives a synthesized answer instead of raw tool output.
+        has_agent = any(s.kind == "agent" for s in steps)
+        has_deliverable = any(s.target in {"write_file", "docgen", "sheet_op"} for s in steps)
+        has_retrieval = any(s.target in {"kb_search", "read_file", "list_dir"} for s in steps)
+
+        if has_retrieval and not has_agent and not has_deliverable and len(steps) < self.MAX_STEPS:
+            steps.append(
+                PlanStep(
+                    n=len(steps) + 1,
+                    kind="agent",
+                    target="reasoning",
+                    args={"input": "<retrieved_document_content>"},
+                    why="Synthesize retrieved context and answer the user's question.",
+                )
+            )
+
         plan = Plan(steps=steps, approved=False, revisions=0)
         _renumber(plan)
         return plan

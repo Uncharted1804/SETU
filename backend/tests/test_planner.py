@@ -207,6 +207,22 @@ def test_kind_is_autocorrected_when_llm_confuses_agent_and_tool(planner, stub):
     assert plan.steps[1].target == "read_file"
 
 
+def test_retrieval_only_plan_appends_reasoning_synthesis_step(planner, stub):
+    """When the LLM proposes only a retrieval tool (kb_search) without an agent,
+    a reasoning step is defensively appended so the answer is synthesized."""
+    stub({"steps": [
+        {"kind": "tool", "target": "kb_search", "args": {"query": "hydrotest"}, "why": "search"}
+    ]})
+
+    plan = asyncio.run(planner.propose(_task(), _decision()))
+    assert len(plan.steps) == 2
+    assert plan.steps[0].target == "kb_search"
+    assert plan.steps[0].kind == "tool"
+    assert plan.steps[1].target == "reasoning"
+    assert plan.steps[1].kind == "agent"
+    assert plan.steps[1].n == 2
+
+
 def test_a_plan_longer_than_the_iteration_cap_is_refused(planner, stub):
     """Six steps cannot finish in five iterations; refuse rather than escalate."""
     step = {"kind": "agent", "target": "reasoning", "args": {}, "why": "think"}
