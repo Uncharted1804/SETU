@@ -311,6 +311,11 @@ async def upload(request: Request, file: UploadFile = File(...), session_id: Opt
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="upload exceeds %d bytes" % MAX_UPLOAD_BYTES)
 
+    from ..security.upload_scan import scan_upload
+    result = scan_upload(file.filename or "upload", raw)
+    if not result.allowed:
+        raise HTTPException(status_code=415, detail=result.reason)
+
     storage_name = safe_storage_name(file.filename or "upload", prefix=secrets.token_hex(3) + "_")
     rel = "uploads/" + storage_name
     try:

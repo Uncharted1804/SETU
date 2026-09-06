@@ -316,6 +316,31 @@ def test_upload_lands_inside_the_workspace(client, env):
     assert stored.resolve().is_relative_to(env.workspace.resolve())
 
 
+def test_upload_rejects_signature_mismatch_with_415(client, env):
+    r = client.post("/api/upload", files={"file": ("fake.pdf", b"MZ_not_a_pdf", "application/pdf")})
+    assert r.status_code == 415
+    assert "blocked" in r.json()["detail"]
+    if (env.workspace / "uploads").exists():
+        assert len(list((env.workspace / "uploads").glob("*"))) == 0
+
+
+def test_upload_rejects_active_pdf_with_415(client, env):
+    active_content = b"%PDF-1.4\n/OpenAction something\n"
+    r = client.post("/api/upload", files={"file": ("active.pdf", active_content, "application/pdf")})
+    assert r.status_code == 415
+    assert "blocked" in r.json()["detail"]
+    if (env.workspace / "uploads").exists():
+        assert len(list((env.workspace / "uploads").glob("*"))) == 0
+
+
+def test_upload_rejects_macro_enabled_office_with_415(client, env):
+    r = client.post("/api/upload", files={"file": ("macro.xlsm", b"PK\x03\x04", "application/vnd.ms-excel.sheet.macroEnabled.12")})
+    assert r.status_code == 415
+    assert "blocked" in r.json()["detail"]
+    if (env.workspace / "uploads").exists():
+        assert len(list((env.workspace / "uploads").glob("*"))) == 0
+
+
 def test_artifact_download_is_task_scoped(client):
     """An artifact id from one task does not resolve under another task."""
     a = client.post("/api/tasks", json={"text": "draft an approval note",
