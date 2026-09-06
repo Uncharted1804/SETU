@@ -567,3 +567,43 @@ UI refinement (2026-09-06):
   affordances. No API or backend change was made.
 - Re-verified `npm run typecheck`, `npm run build`, backend tests (201 passed,
   1 skipped), and contract sync (15 interfaces and 4 unions).
+
+UI polish & layout refinements (2026-09-06 - Antigravity):
+- Item 1: Removed `0.1.0-scaffold` version badge from header and updated `backend/app/config.py` VERSION to `0.1.0`.
+- Item 2: Implemented auto-resizing composer textarea with Gemini-style height limit (max 160px), resetting cleanly on empty text, and added an Enlarge button (`Maximize2` icon) opening a dedicated expanded prompt modal dialog with char/word count and keyboard shortcuts (Ctrl+Enter to send, Esc to close).
+- Item 3: Corrected "Message SETU" placeholder proportions and vertical alignment to be perfectly centered in the initial chat pill bar.
+- Item 4: Elevated Plan approval decisions (`Approve` and `Reject`) from the bottom of the plan card into a top-level header pill group beside the Plan title, replacing the "4 steps" label when approval is pending.
+- Item 5: Replaced the blinking orange reconnecting stream error box in the Activity stream with a quiet, smooth rotating loading icon in the Activity summary header.
+- Item 6: Redesigned the Proof rail:
+  - Fixed light mode and dark mode text visibility (high-contrast WCAG AA compliant across all labels, values, and prose).
+  - Clear type scale: clean sans-serif for labels, prose, and action names; monospace strictly reserved for hashes, IDs, and digests.
+  - Upgraded Network posture into a mini dashboard: bold external counter with status tint (emerald for 0 leaks), clean breakdown for loopback/trusted LAN.
+  - Converted audit trail into an authentic connected timeline with vertical connecting lines and status dots.
+  - Moved explanatory prose into distinctly styled info blocks with subtle backgrounds and info icons.
+- Item 7: Harmonized into a single, cohesive design system across light and dark modes (Slate surfaces + Royal Blue primary action + Emerald/Amber/Rose semantic statuses).
+- Verification:
+  - `npm --prefix frontend run typecheck` passed (0 errors).
+  - `npm --prefix frontend run build` passed.
+  - `python scripts/check_contract_sync.py` passed (15 interfaces, 4 unions).
+  - `pytest backend/tests` passed (201 passed, 1 skipped).
+  - Direct browser verification completed and recorded with visual screenshots for all 7 items in both Light and Dark modes.
+
+Network Posture Redesign (2026-09-06 - Antigravity):
+- Replaced the oversized green "EXTERNAL 0 the number that matters" card with a balanced, informative socket telemetry dashboard:
+  - Header: Live egress boundary state (`Air-gapped (Local only)` / `Active external egress`) with status indicator dot and total socket count (`X active sockets`).
+  - Topology Distribution Bar: Visual proportional bar showing traffic distribution across loopback, WAN, LAN, and unclassified streams.
+  - Symmetrical 2x2 Metric Grid: Uniform cards for External WAN, Loopback, Trusted LAN, and Unclassified with explicit socket counts, contextual sub-labels, and leak-detection status.
+  - Preserved all honesty constraints: four numbers are never collapsed, blocked negative control attempts stay separate, and sampling scope disclaimers remain intact.
+  - Removed redundant floating `Sovereign` badge from Network posture header, eliminating visual clutter.
+- Neutral Plan Approval Option Pill:
+  - Removed default pre-selected solid green highlight on `Approve` button to eliminate user confusion.
+  - Rendered both `Approve` and `Reject` as neutral, equal unselected options inside the pill group.
+  - Added subtle directional hover styling (emerald for Approve, rose for Reject).
+  - Removed green highlight from `Air-gapped · 0 leaks` label, styling it with neutral `text-muted` to match other socket cards.
+- Verification:
+  - `npm --prefix frontend run typecheck`: 0 errors.
+  - `npm --prefix frontend run build`: Clean production bundle.
+  - Direct browser verification confirmed clean layout, correct typography, neutral unselected plan options, and proper active state on click.
+
+
+

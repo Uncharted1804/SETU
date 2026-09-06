@@ -13,6 +13,7 @@ import {
   SessionSidebar,
   StudioLayout,
   TaskStateLine,
+  TranscriptSkeleton,
   UserTurn,
   type Theme,
 } from "./components/workspace";
@@ -20,11 +21,16 @@ import type { ApprovalRequest, ArtifactRef, SessionDetail, SessionSummary, TaskS
 import { TERMINAL_STATES } from "./types";
 import { useTaskStream } from "./useTaskStream";
 
+function initialTheme(): Theme {
+  // index.html sets this attribute synchronously, before paint, from
+  // localStorage or prefers-color-scheme, so there is no flash of the wrong theme.
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
 export default function App() {
-  // A bright reading surface is the default; the control keeps the existing dark option available.
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [ready, setReady] = useState(false);
   const [mockMode, setMockMode] = useState<boolean | null>(null);
-  const [version, setVersion] = useState("");
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSession, setActiveSession] = useState<SessionDetail | null>(null);
   const [text, setText] = useState("");
@@ -38,6 +44,7 @@ export default function App() {
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [decidingChoice, setDecidingChoice] = useState<"approve" | "reject" | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const previousScrollTop = useRef(0);
 
@@ -47,6 +54,11 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem("setu-theme", theme);
+    } catch {
+      // Private browsing or storage disabled: theme still applies for this load.
+    }
   }, [theme]);
 
   useEffect(() => {
@@ -82,7 +94,6 @@ export default function App() {
     void Promise.all([api.health(), api.sessions(), api.currentSession()])
       .then(([health, savedSessions, current]) => {
         setMockMode(health.mock_mode);
-        setVersion(health.version);
         setSessions(savedSessions);
         setActiveSession(current);
         const running = current
@@ -94,7 +105,8 @@ export default function App() {
       .catch((reason) => {
         setMockMode(null);
         setError(String(reason));
-      });
+      })
+      .finally(() => setReady(true));
   }, []);
 
   useEffect(() => {
@@ -158,6 +170,12 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!status?.pending_approval || status.pending_approval.decided) {
+      setDecidingChoice(null);
+    }
+  }, [status?.pending_approval]);
+
   const decide = useCallback(async (approval: ApprovalRequest, approved: boolean) => {
     if (!taskId) return;
     setBusy(true);
@@ -165,6 +183,7 @@ export default function App() {
       await api.approve(taskId, approval.approval_id, approved);
     } catch (reason) {
       setError(String(reason));
+      setDecidingChoice(null);
     } finally {
       setBusy(false);
     }
@@ -215,6 +234,20 @@ export default function App() {
     previousScrollTop.current = node.scrollTop;
   };
 
+  const turns = activeSession?.turns ?? [];
+  const composerProps = {
+    text,
+    attachments: uploads,
+    busy,
+    disabled: taskRunning,
+    error,
+    detached: composerDetached,
+    onTextChange: setText,
+    onUpload: (files: FileList | null) => void upload(files),
+    onRemoveAttachment: (path: string) => setUploads((current) => current.filter((item) => item !== path)),
+    onSubmit: () => void submit(),
+  };
+
   const artifacts = useMemo(() => {
     const collected = new Map<string, ArtifactRef>();
     for (const turn of activeSession?.turns ?? []) {
@@ -226,11 +259,11 @@ export default function App() {
 
   return (
     <div className="app-root">
-      {mockMode && <div className="mock-ribbon">SIMULATED ENVIRONMENT · outputs are deterministic fixtures</div>}
       <StudioLayout
         history={
           <SessionSidebar
             sessions={sessions}
+            loading={!ready}
             activeId={activeSession?.session_id ?? null}
             busy={busy}
             collapsed={historyCollapsed}
@@ -244,53 +277,83 @@ export default function App() {
             <ConversationHeader
               session={activeSession}
               mockMode={mockMode}
-              version={version}
               theme={theme}
               onThemeChange={() => setTheme((current) => current === "dark" ? "light" : "dark")}
               onOpenHistory={() => setHistoryOpen(true)}
               onOpenInspector={() => setInspectorOpen(true)}
             />
-            <div className="transcript" ref={transcriptRef} onScroll={onTranscriptScroll}>
-              {!activeSession?.turns.length && <EmptyChat />}
-              {activeSession?.turns.map((turn) => (
-                <div className="thread-pair" key={turn.task_id}>
-                  <UserTurn text={turn.user_text} attachments={turn.file_paths} timestamp={turn.created_at} />
-                  {turn.assistant_text && <AssistantTurn text={turn.assistant_text} timestamp={turn.updated_at} />}
-                  {turn.task_id === taskId && (
-                    <ActiveTask>
-                      <TaskStateLine status={status} terminal={terminal} onCancel={() => void api.cancel(turn.task_id)} />
-                      <RouterBanner decision={status?.router_decision ?? null} />
-                      <details
-                        className="work-disclosure"
-                        open={Boolean(status?.pending_approval && !status.pending_approval.decided) || undefined}
-                      >
-                        <summary>
-                          <span>Plan</span>
-                          <span>{status?.plan?.steps.length ?? 0} steps · {status?.iterations_used ?? 0}/{status?.max_iterations ?? 5}</span>
-                        </summary>
-                        <div className="work-disclosure-body">
-                          <PlanChecklist status={status} onDecision={decide} busy={busy} />
-                        </div>
-                      </details>
-                      <StreamView events={stream.events} connected={stream.connected} error={stream.error} />
-                    </ActiveTask>
-                  )}
+            {ready && turns.length === 0 ? (
+              <div className="welcome-stage">
+                <EmptyChat />
+                <ChatComposer {...composerProps} artifacts={artifacts} centered />
+              </div>
+            ) : (
+              <>
+                <div className="transcript" ref={transcriptRef} onScroll={onTranscriptScroll}>
+                  {!ready && <TranscriptSkeleton />}
+                  {turns.map((turn) => (
+                    <div className="thread-pair" key={turn.task_id}>
+                      <UserTurn text={turn.user_text} attachments={turn.file_paths} />
+                      {turn.assistant_text && <AssistantTurn text={turn.assistant_text} />}
+                      {turn.task_id === taskId && (
+                        <ActiveTask>
+                          <TaskStateLine status={status} terminal={terminal} onCancel={() => void api.cancel(turn.task_id)} />
+                          <RouterBanner decision={status?.router_decision ?? null} />
+                          <details
+                            className="work-disclosure"
+                            open={Boolean(status?.pending_approval && !status.pending_approval.decided) || undefined}
+                          >
+                            <summary>
+                              <span className="disclosure-label">
+                                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="m9 6 6 6-6 6" />
+                                </svg>
+                                Plan
+                              </span>
+                              {status?.pending_approval && !status.pending_approval.decided ? (
+                                <div className="plan-approval-pill" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    className={`pill-action pill-approve ${decidingChoice === "approve" ? "is-selected" : ""}`}
+                                    disabled={busy}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDecidingChoice("approve");
+                                      decide(status.pending_approval!, true);
+                                    }}
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`pill-action pill-reject ${decidingChoice === "reject" ? "is-selected" : ""}`}
+                                    disabled={busy}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDecidingChoice("reject");
+                                      decide(status.pending_approval!, false);
+                                    }}
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              ) : (
+                                <span>{status?.plan?.steps.length ?? 0} steps</span>
+                              )}
+                            </summary>
+                            <div className="work-disclosure-body">
+                              <PlanChecklist status={status} />
+                            </div>
+                          </details>
+                          <StreamView events={stream.events} connected={stream.connected} error={stream.error} />
+                        </ActiveTask>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <ChatComposer
-              text={text}
-              attachments={uploads}
-              artifacts={artifacts}
-              busy={busy}
-              disabled={taskRunning}
-              error={error}
-              detached={composerDetached}
-              onTextChange={setText}
-              onUpload={(files) => void upload(files)}
-              onRemoveAttachment={(path) => setUploads((current) => current.filter((item) => item !== path))}
-              onSubmit={() => void submit()}
-            />
+                <ChatComposer {...composerProps} artifacts={artifacts} />
+              </>
+            )}
           </>
         }
         inspector={<InspectorRail collapsed={inspectorCollapsed} onToggle={() => setInspectorCollapsed((current) => !current)} />}

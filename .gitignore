@@ -57,3 +57,4 @@ desktop.ini
 .tmp/
 credentials.json
 token.json
+graphify-out/

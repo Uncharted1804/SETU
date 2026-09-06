@@ -15,12 +15,12 @@ export function Panel({
 }) {
   return (
     <section className={`flat-panel ${className}`}>
-      <header className="flex items-center justify-between border-b border-edge/60 py-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-          {title}
-        </h2>
-        {right}
-      </header>
+      {(title || right) && (
+        <header className="flex items-center justify-between gap-2 py-2">
+          {title ? <h2 className="text-[12px] font-semibold text-muted">{title}</h2> : <span />}
+          {right}
+        </header>
+      )}
       <div className="py-3">{children}</div>
     </section>
   );
@@ -40,7 +40,7 @@ export function Collapsible({
     <details className="group border-b border-edge/60">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-2.5 marker:content-none">
         <span>
-          <span className="text-xs font-semibold text-slate-200">{title}</span>
+          <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">{title}</span>
           <span className="ml-2 text-[11px] text-muted">{description}</span>
         </span>
         <svg
@@ -64,14 +64,14 @@ export function Tag({
   tone?: "neutral" | "good" | "warn" | "bad" | "accent";
 }) {
   const tones: Record<string, string> = {
-    neutral: "bg-edge text-muted",
-    good: "bg-good/15 text-good",
-    warn: "bg-warn/15 text-warn",
-    bad: "bg-bad/15 text-bad",
-    accent: "bg-accent/15 text-accent",
+    neutral: "bg-edge/80 text-slate-700 dark:text-slate-300",
+    good: "bg-good/15 text-good font-semibold",
+    warn: "bg-warn/15 text-warn font-semibold",
+    bad: "bg-bad/15 text-bad font-semibold",
+    accent: "bg-accent/15 text-accent font-semibold",
   };
   return (
-    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${tones[tone]}`}>
+    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wide ${tones[tone]}`}>
       {children}
     </span>
   );
@@ -86,11 +86,11 @@ export function Empty({ children }: { children: ReactNode }) {
   return <p className="py-6 text-center text-xs text-muted">{children}</p>;
 }
 
-export function KeyValue({ k, v }: { k: string; v: ReactNode }) {
+export function KeyValue({ k, v, mono = false }: { k: string; v: ReactNode; mono?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-0.5 text-xs">
-      <span className="text-muted">{k}</span>
-      <span className="font-mono text-right text-slate-300">{v}</span>
+      <span className="text-muted font-sans">{k}</span>
+      <span className={`text-right text-content ${mono ? "font-mono text-[11px]" : "font-sans font-medium"}`}>{v}</span>
     </div>
   );
 }
@@ -102,7 +102,7 @@ export function KeyValue({ k, v }: { k: string; v: ReactNode }) {
  */
 export function PlainText({ text }: { text: string }) {
   return (
-    <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-300">
+    <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-content">
       {text}
     </div>
   );
