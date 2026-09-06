@@ -89,9 +89,10 @@ function Get-TrustedSubnet {
         throw "TrustedSubnet prefix must be between 0 and 32."
     }
 
-    [uint64]$mask = if ($prefix -eq 0) { 0 } else { (([uint64]0xFFFFFFFF) -shl (32 - $prefix)) -band 0xFFFFFFFF }
+    [uint64]$thirtyTwoOnes = [uint64]"0xFFFFFFFF"
+    [uint64]$mask = if ($prefix -eq 0) { 0 } else { ($thirtyTwoOnes -shl (32 - $prefix)) -band $thirtyTwoOnes }
     [uint64]$network = (Get-IPv4Number $address) -band $mask
-    [uint64]$broadcast = $network -bor (0xFFFFFFFF -bxor $mask)
+    [uint64]$broadcast = $network -bor ($thirtyTwoOnes -bxor $mask)
     if (-not (Test-Rfc1918Number $network) -or -not (Test-Rfc1918Number $broadcast)) {
         throw "TrustedSubnet must be wholly inside one RFC1918 range; '$Cidr' is not."
     }
