@@ -431,11 +431,19 @@ def test_scenario_selection_uses_whole_words():
     assert select_scenario("here is a traceback", "coding", []) == "coding_retry"
     assert select_scenario("this vendor letter looks odd", "reasoning", []) == "injection"
     assert select_scenario("the scan is degraded", "vision", []) == "escalation"
+    assert select_scenario("solve this coding problem", "vision", ["problem.png"]) == "vision_code"
 
 
 def test_every_scenario_key_is_reachable_or_explicitly_manual():
     from app.mocks.scenarios import SCENARIOS
 
-    reachable = {"flagship", "observation_branch", "coding_retry", "injection", "escalation"}
+    reachable = {
+        "flagship",
+        "observation_branch",
+        "coding_retry",
+        "injection",
+        "escalation",
+        "vision_code",
+    }
     manual = {"rejection", "observation_branch_clean"}  # chosen explicitly in the UI
     assert reachable | manual == set(SCENARIOS)

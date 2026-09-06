@@ -151,6 +151,7 @@ MEDIA_TYPES = {
     ".json": "application/json",
     ".png": "image/png",
     ".jpg": "image/jpeg",
+    ".py": "text/x-python; charset=utf-8",
     ".csv": "text/csv",
 }
 

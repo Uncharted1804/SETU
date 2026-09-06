@@ -168,7 +168,7 @@ class Executor:
 
                 if record.escalation_reason:
                     return await self._finalise(record, "needs_human_review",
-                                                record.escalation_reason)
+                                                record.escalation_reason, ctx)
 
                 if planner.is_satisfied(plan, observations):
                     break
@@ -179,9 +179,9 @@ class Executor:
                     record.escalation_reason = message
                     await self._emit(record, "escalate",
                                      {"reason": message, "code": ErrorCode.ITERATION_CAP})
-                    return await self._finalise(record, "needs_human_review", message)
+                    return await self._finalise(record, "needs_human_review", message, ctx)
 
-            return await self._finalise(record, "completed", "plan satisfied")
+            return await self._finalise(record, "completed", "plan satisfied", ctx)
 
         except ApprovalRejected as exc:
             await self._audit(record, action="approval.rejected", result=str(exc))
@@ -247,7 +247,12 @@ class Executor:
         agent = step.target
         limit = policy.max_attempts_for(agent)
         feedback: Optional[str] = None
-        inputs = _agent_inputs(record.observations, step, record.envelope.file_paths)
+        inputs = _agent_inputs(
+            record.observations,
+            step,
+            record.envelope.file_paths,
+            record.envelope.text,
+        )
         result = None
 
         for attempt in range(1, limit + 1):
@@ -308,7 +313,9 @@ class Executor:
 
     # -- finalisation --------------------------------------------------------
 
-    async def _finalise(self, record: TaskRecord, state: str, summary: str) -> TaskResult:
+    async def _finalise(
+        self, record: TaskRecord, state: str, summary: str, ctx: Optional[ToolContext] = None
+    ) -> TaskResult:
         """Publish the terminal events BEFORE the terminal state becomes visible.
 
         Ordering here is load-bearing. `record.set_state()` is synchronous, but
@@ -331,6 +338,26 @@ class Executor:
         `_audit` emits its own "audit" event, so that ordering would push an
         "audit" event after "done" and break the same invariant a different way.
         """
+        if ctx is not None and state == "completed":
+            has_py = any(a.name.endswith(".py") for a in record.artifacts)
+            if not has_py:
+                for obs in record.observations:
+                    code = (obs.payload or {}).get("code")
+                    if isinstance(code, str) and code.strip():
+                        try:
+                            target = ctx.resolve("solution.py")
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            if not target.exists():
+                                target.write_text(code.strip() + "\n", encoding="utf-8")
+                                ref = ctx.register_artifact(
+                                    target, "text/x-python; charset=utf-8", simulated=ctx.mock
+                                )
+                                if ref.artifact_id not in {a.artifact_id for a in record.artifacts}:
+                                    record.artifacts.append(ref)
+                                    await self._emit(record, "artifact", ref.model_dump())
+                            break
+                        except Exception:
+                            pass
         result = TaskResult(
             task_id=record.task_id,
             state=state,  # type: ignore[arg-type]
@@ -414,6 +441,7 @@ def _agent_inputs(
     observations: list[Observation],
     step: PlanStep,
     task_file_paths: Optional[list[str]] = None,
+    task_text: Optional[str] = None,
 ) -> dict:
     """What the orchestrator RELAYS into an agent call.
 
@@ -423,6 +451,7 @@ def _agent_inputs(
     return {
         "why": step.why,
         "args": step.args,
+        "task_text": task_text or "",
         "file_paths": task_file_paths or [],
         "prior": [
             {"target": o.target, "ok": o.ok, "summary": o.summary, "payload": o.payload}

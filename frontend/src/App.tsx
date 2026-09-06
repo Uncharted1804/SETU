@@ -294,7 +294,18 @@ export default function App() {
                   {turns.map((turn) => (
                     <div className="thread-pair" key={turn.task_id}>
                       <UserTurn text={turn.user_text} attachments={turn.file_paths} />
-                      {turn.assistant_text && <AssistantTurn text={turn.assistant_text} />}
+                      {turn.assistant_text && (
+                        <AssistantTurn
+                          text={turn.assistant_text}
+                          artifacts={
+                            turn.task_id === taskId
+                              ? (status?.artifacts && status.artifacts.length > 0
+                                  ? status.artifacts
+                                  : turn.status?.artifacts ?? [])
+                              : (turn.status?.artifacts ?? [])
+                          }
+                        />
+                      )}
                       {turn.task_id === taskId && (
                         <ActiveTask>
                           <TaskStateLine status={status} terminal={terminal} onCancel={() => void api.cancel(turn.task_id)} />

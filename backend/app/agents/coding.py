@@ -58,8 +58,30 @@ def _generated_code(response: dict) -> str:
 
 
 def _messages(inv: AgentInvocation) -> list[dict[str, str]]:
+    problem_text = ""
+    for item in (inv.inputs or {}).get("prior", []):
+        if isinstance(item, dict) and item.get("target") == "vision":
+            payload = item.get("payload") or {}
+            raw = payload.get("raw_text")
+            if raw and isinstance(raw, str) and raw.strip():
+                problem_text = raw.strip()
+                break
+            findings = payload.get("findings")
+            if isinstance(findings, list) and findings:
+                f_texts = [f.get("text", "") for f in findings if isinstance(f, dict) and f.get("text")]
+                if f_texts:
+                    problem_text = "\n".join(f_texts)
+                    break
+
+    task_desc = inv.prompt_summary
+    task_text = (inv.inputs or {}).get("task_text")
+    if task_text and task_text != inv.prompt_summary:
+        task_desc += " | User request: " + str(task_text)
+    if problem_text:
+        task_desc += "\nProblem statement extracted from image:\n" + problem_text
+
     task = {
-        "task": inv.prompt_summary,
+        "task": task_desc,
         "inputs": inv.inputs,
         "attempt": inv.attempt,
         "feedback": inv.feedback,
@@ -68,7 +90,8 @@ def _messages(inv: AgentInvocation) -> list[dict[str, str]]:
         {
             "role": "system",
             "content": (
-                "You are SETU's coding agent. Produce one self-contained Python solution. "
+                "You are SETU's coding agent. Produce one self-contained Python solution "
+                "to solve the specified task or programming problem. "
                 "Return only a JSON object with exactly one key, `code`. The value must be "
                 "Python source. Do not claim execution results; SETU will run the code in "
                 "its hardened Docker sandbox."

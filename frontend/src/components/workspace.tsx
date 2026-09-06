@@ -199,10 +199,208 @@ export function UserTurn({ text, attachments }: { text: string; attachments: str
   );
 }
 
-export function AssistantTurn({ text }: { text: string }) {
+interface TextBlock {
+  type: "text";
+  content: string;
+}
+
+interface CodeBlockData {
+  type: "code";
+  language: string;
+  code: string;
+}
+
+type ContentBlock = TextBlock | CodeBlockData;
+
+function parseAssistantContent(rawText: string): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  const regex = /```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(rawText)) !== null) {
+    if (match.index > lastIndex) {
+      const textChunk = rawText.slice(lastIndex, match.index);
+      if (textChunk.trim()) {
+        blocks.push({ type: "text", content: textChunk });
+      }
+    }
+    blocks.push({
+      type: "code",
+      language: match[1] || "python",
+      code: match[2].replace(/\n$/, ""),
+    });
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < rawText.length) {
+    const remaining = rawText.slice(lastIndex);
+    if (remaining.trim()) {
+      blocks.push({ type: "text", content: remaining });
+    }
+  }
+
+  if (blocks.length === 0 && rawText.trim()) {
+    blocks.push({ type: "text", content: rawText });
+  }
+
+  return blocks;
+}
+
+export function CodeBlock({
+  language,
+  code,
+  artifact,
+}: {
+  language: string;
+  code: string;
+  artifact?: ArtifactRef;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard write fallback
+    }
+  };
+
+  const displayLang = language.trim() ? language.trim().toLowerCase() : "code";
+
+  return (
+    <div className="chat-code-block">
+      <div className="chat-code-header">
+        <span className="code-lang-label">{displayLang}</span>
+        <div className="code-header-actions">
+          {artifact && (
+            <a
+              href={api.artifactUrl(artifact.task_id, artifact.artifact_id)}
+              download={artifact.name}
+              className="code-action-btn code-download-btn"
+              title={`Download ${artifact.name}`}
+            >
+              <DownloadIcon />
+              <span>Download</span>
+            </a>
+          )}
+          <button
+            type="button"
+            className={`code-action-btn code-copy-btn ${copied ? "copied" : ""}`}
+            onClick={handleCopy}
+            aria-label={copied ? "Copied to clipboard" : "Copy code"}
+            title={copied ? "Copied!" : "Copy code"}
+          >
+            {copied ? <CheckIcon /> : <CopyIcon />}
+            <span>{copied ? "Copied!" : "Copy code"}</span>
+          </button>
+        </div>
+      </div>
+      <div className="chat-code-body">
+        <pre>
+          <code>{code}</code>
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function FormattedText({ text }: { text: string }) {
+  const paragraphs = text.split(/\n\n+/);
+  return (
+    <div className="assistant-text-flow">
+      {paragraphs.map((para, pIdx) => {
+        const parts: ReactNode[] = [];
+        const inlineRegex = /(`[^`]+`|\*\*[^*]+\*\*)/g;
+        let lastIdx = 0;
+        let inlineMatch: RegExpExecArray | null;
+
+        while ((inlineMatch = inlineRegex.exec(para)) !== null) {
+          if (inlineMatch.index > lastIdx) {
+            parts.push(para.slice(lastIdx, inlineMatch.index));
+          }
+          const token = inlineMatch[0];
+          if (token.startsWith("`") && token.endsWith("`")) {
+            parts.push(
+              <code key={inlineMatch.index} className="inline-code">
+                {token.slice(1, -1)}
+              </code>
+            );
+          } else if (token.startsWith("**") && token.endsWith("**")) {
+            parts.push(
+              <strong key={inlineMatch.index}>
+                {token.slice(2, -2)}
+              </strong>
+            );
+          }
+          lastIdx = inlineRegex.lastIndex;
+        }
+        if (lastIdx < para.length) {
+          parts.push(para.slice(lastIdx));
+        }
+
+        return (
+          <p key={pIdx} className="assistant-p">
+            {parts}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+export function AssistantTurn({
+  text,
+  artifacts = [],
+}: {
+  text: string;
+  artifacts?: ArtifactRef[];
+}) {
+  const blocks = parseAssistantContent(text);
+  const solutionArtifact = artifacts.find((a) => a.name.endsWith(".py"));
+
   return (
     <article className="turn assistant-turn">
-      <p>{text}</p>
+      <div className="assistant-content">
+        {blocks.map((block, idx) => {
+          if (block.type === "code") {
+            const matchingArtifact =
+              block.language === "python" || block.language === "py"
+                ? solutionArtifact
+                : artifacts.find((a) => a.name.includes(block.language));
+            return (
+              <CodeBlock
+                key={idx}
+                language={block.language}
+                code={block.code}
+                artifact={matchingArtifact}
+              />
+            );
+          }
+          return <FormattedText key={idx} text={block.content} />;
+        })}
+
+        {artifacts.length > 0 && (
+          <div className="turn-artifacts">
+            {artifacts.map((artifact) => (
+              <a
+                key={artifact.artifact_id}
+                href={api.artifactUrl(artifact.task_id, artifact.artifact_id)}
+                download={artifact.name}
+                className="turn-artifact-pill"
+                title={`Download deliverable artifact ${artifact.name}`}
+              >
+                <FileIcon />
+                <span className="artifact-pill-name">{artifact.name}</span>
+                <span className="artifact-pill-size">{(artifact.size_bytes / 1024).toFixed(1)} kB</span>
+                <DownloadIcon />
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
     </article>
   );
 }
@@ -509,3 +707,27 @@ function FileIcon() { return <Svg><path d="M6 2h8l4 4v16H6zM14 2v5h5" /></Svg>; 
 function ArrowIcon() { return <Svg><path d="m5 12 7-7 7 7M12 5v14" /></Svg>; }
 function MaximizeIcon() { return <Svg><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></Svg>; }
 function MinimizeIcon() { return <Svg><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" /></Svg>; }
+function CopyIcon() {
+  return (
+    <Svg>
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </Svg>
+  );
+}
+function CheckIcon() {
+  return (
+    <Svg>
+      <path d="M20 6 9 17l-5-5" />
+    </Svg>
+  );
+}
+function DownloadIcon() {
+  return (
+    <Svg>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </Svg>
+  );
+}
