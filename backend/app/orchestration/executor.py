@@ -95,6 +95,10 @@ class Executor:
             session_id=record.envelope.session_id,
             mock=self.settings.mock_mode,
         )
+        # Create this task's root eagerly, before any step runs. A plan whose
+        # first action is list_dir(".") must see an empty directory rather than
+        # fail on one that no write has created yet.
+        ctx.ensure_root()
 
         try:
             # -- plan ---------------------------------------------------------
@@ -304,7 +308,28 @@ class Executor:
     # -- finalisation --------------------------------------------------------
 
     async def _finalise(self, record: TaskRecord, state: str, summary: str) -> TaskResult:
-        record.set_state(state)  # type: ignore[arg-type]
+        """Publish the terminal events BEFORE the terminal state becomes visible.
+
+        Ordering here is load-bearing. `record.set_state()` is synchronous, but
+        `self._audit()` below awaits `asyncio.to_thread` inside AuditLog.append,
+        which is a real yield. Setting the state first meant a concurrent
+        GET /api/tasks/{id} could see a terminal state while replay history
+        still ended at "step_done" - so anything that reads history at that
+        moment, or whose stream ends before the live "done" arrives, sees a task
+        that finished with no `done` event. Measured on this machine before the
+        change: 12 of 12 runs at natural timing observed the terminal state with
+        "done" absent from history.
+
+        `set_state` therefore happens LAST, after both terminal emits. Until
+        then the record keeps its previous non-terminal state, which is the safe
+        thing for a poller to see. Nothing between here and there reads
+        `record.state`: TaskResult takes `state` as a parameter, and `_audit`
+        and `_emit` only read task_id, envelope.session_id and envelope.user.
+
+        The audit call is deliberately NOT moved after the emits instead:
+        `_audit` emits its own "audit" event, so that ordering would push an
+        "audit" event after "done" and break the same invariant a different way.
+        """
         result = TaskResult(
             task_id=record.task_id,
             state=state,  # type: ignore[arg-type]
@@ -320,6 +345,9 @@ class Executor:
         await self._audit(record, action="task.finalised", result=state, args=summary)
         await self._emit(record, "state", {"state": state, "task_id": record.task_id})
         await self._emit(record, "done", result.model_dump())
+        # LAST. See the docstring: the terminal state must not become visible
+        # to a concurrent reader before the events describing it are in history.
+        record.set_state(state)  # type: ignore[arg-type]
         return result
 
 

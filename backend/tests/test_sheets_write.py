@@ -10,12 +10,14 @@ from app.tools.sheets import sheet_op
 @pytest.fixture
 def mock_ctx(tmp_path):
     settings = Settings(workspace=tmp_path)
-    return ToolContext(settings=settings, task_id="test_task", session_id="test_session")
+    ctx = ToolContext(settings=settings, task_id="test_task", session_id="test_session")
+    ctx.ensure_root()
+    return ctx
 
 @pytest.fixture
-def source_workbook(tmp_path):
+def source_workbook(mock_ctx):
     import openpyxl
-    path = tmp_path / "sensor_readings.xlsx"
+    path = mock_ctx.workspace / "sensor_readings.xlsx"
     
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -31,7 +33,7 @@ def test_sheet_write_basic(source_workbook, mock_ctx):
     out_path = "output.xlsx"
     args = SheetOpArgs(
         op="write",
-        path=str(source_workbook.relative_to(mock_ctx.settings.workspace)),
+        path=str(source_workbook.relative_to(mock_ctx.workspace)),
         out_path=out_path,
         data={
             "sheet_name": "MyResults",
@@ -48,7 +50,7 @@ def test_sheet_write_basic(source_workbook, mock_ctx):
     assert result["created"] is True
     
     # 2. Output workbook is created
-    out_full = mock_ctx.settings.workspace / out_path
+    out_full = mock_ctx.workspace / out_path
     assert out_full.exists()
     
     # 3. Source workbook remains byte-for-byte unchanged (check mtime)
@@ -68,7 +70,7 @@ def test_sheet_write_formatting_status_column(source_workbook, mock_ctx):
     out_path = "output_fmt.xlsx"
     args = SheetOpArgs(
         op="write",
-        path=str(source_workbook.relative_to(mock_ctx.settings.workspace)),
+        path=str(source_workbook.relative_to(mock_ctx.workspace)),
         out_path=out_path,
         data={
             "headers": ["Sensor", "Value", "Status"],
@@ -87,7 +89,7 @@ def test_sheet_write_formatting_status_column(source_workbook, mock_ctx):
     
     asyncio.run(sheet_op(args, mock_ctx))
     
-    out_full = mock_ctx.settings.workspace / out_path
+    out_full = mock_ctx.workspace / out_path
     import openpyxl
     wb = openpyxl.load_workbook(out_full)
     ws = wb.active
@@ -109,7 +111,7 @@ def test_sheet_write_formatting_highlight_rows(source_workbook, mock_ctx):
     out_path = "output_fmt2.xlsx"
     args = SheetOpArgs(
         op="write",
-        path=str(source_workbook.relative_to(mock_ctx.settings.workspace)),
+        path=str(source_workbook.relative_to(mock_ctx.workspace)),
         out_path=out_path,
         data={
             "headers": ["Sensor", "Value"],
@@ -127,7 +129,7 @@ def test_sheet_write_formatting_highlight_rows(source_workbook, mock_ctx):
     
     asyncio.run(sheet_op(args, mock_ctx))
     
-    out_full = mock_ctx.settings.workspace / out_path
+    out_full = mock_ctx.workspace / out_path
     import openpyxl
     wb = openpyxl.load_workbook(out_full)
     ws = wb.active
@@ -140,7 +142,7 @@ def test_sheet_write_formatting_highlight_rows(source_workbook, mock_ctx):
 def test_sheet_write_invalid_color_fails_cleanly(source_workbook, mock_ctx):
     args = SheetOpArgs(
         op="write",
-        path=str(source_workbook.relative_to(mock_ctx.settings.workspace)),
+        path=str(source_workbook.relative_to(mock_ctx.workspace)),
         out_path="out.xlsx",
         data={
             "headers": ["A"],

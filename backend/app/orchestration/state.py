@@ -110,6 +110,47 @@ class TaskRecord:
         )
 
 
+@dataclass
+class StagedUpload:
+    """One file accepted by POST /api/upload but not yet claimed by a task."""
+
+    rel_path: str
+    session_id: Optional[str]
+    uploaded_at: str = field(default_factory=_now)
+
+
+class StagedUploadStore:
+    """Which session staged which upload.  Same shape as TaskStore, same reasons.
+
+    An upload lands in the shared workspace before any task exists, so this is
+    the only record of who put it there.  `service.create_task` consults it to
+    decide whether the caller may reference a path at all - without it,
+    `file_paths` would be a way to name any file another session had uploaded.
+
+    In-memory and bounded, like TaskStore: one operator, one process, and a
+    restart losing staged uploads is the same trade already documented in
+    D-007.
+    """
+
+    def __init__(self, limit: int = 500) -> None:
+        self._staged: dict[str, StagedUpload] = {}
+        self._order: list[str] = []
+        self._limit = limit
+
+    def stage(self, rel_path: str, session_id: Optional[str]) -> StagedUpload:
+        entry = StagedUpload(rel_path=rel_path, session_id=session_id)
+        if rel_path not in self._staged:
+            self._order.append(rel_path)
+        self._staged[rel_path] = entry
+        while len(self._order) > self._limit:
+            evicted = self._order.pop(0)
+            self._staged.pop(evicted, None)
+        return entry
+
+    def get(self, rel_path: str) -> Optional[StagedUpload]:
+        return self._staged.get(rel_path)
+
+
 class TaskStore:
     """In-memory, single process.  Bounded so a long demo cannot grow forever."""
 

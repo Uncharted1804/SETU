@@ -12,7 +12,7 @@ Nobody edits another person's directory without a message first.
 
 | Owner | Owns |
 |---|---|
-| **P1** | `backend/app/contracts.py`, `config.py`, `router.py`, `service.py`, `main.py`, `orchestration/`, `llm/`, `tools/registry.py`, `agents/__init__.py`, `mocks/` |
+| **P1** | `backend/app/contracts.py`, `config.py`, `router.py`, `service.py`, `main.py`, `orchestration/`, `llm/`, `tools/base.py`, `tools/registry.py`, `agents/__init__.py`, `mocks/` |
 | **P2** | `backend/app/agents/vision.py`, `backend/app/tools/ocr.py` |
 | **P3** | `backend/app/agents/reasoning.py`, `tools/kb.py`, `security/injection.py`, `data/kb_corpus/` |
 | **P4** | `backend/app/agents/coding.py`, `tools/sandbox.py`, `tools/fs.py`, `security/paths.py`, `security/cors.py`, `security/netwatch.py`, `scripts/netwatch_classifier.py`, `scripts/preflight.py`, `sandbox/`, `docker/` |

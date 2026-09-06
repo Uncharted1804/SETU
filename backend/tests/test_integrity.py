@@ -5,9 +5,9 @@ from unittest import mock
 
 import pytest
 
-from backend.app.config import ModelRegistry
-from backend.app.contracts import ModelEntry
-from backend.app.security.integrity import verify_installed, annotate, load_allowlist
+from app.config import ModelRegistry
+from app.contracts import ModelEntry
+from app.security.integrity import verify_installed, annotate, load_allowlist
 
 
 def test_integrity_verified():
@@ -47,11 +47,11 @@ def test_integrity_verified():
         )
         registry = ModelRegistry(entries=[entry], defaults={})
         
-        with mock.patch("backend.app.security.integrity.allowlist_path", return_value=allowlist_path):
+        with mock.patch("app.security.integrity.allowlist_path", return_value=allowlist_path):
             results = verify_installed(registry, ollama_home=ollama_home)
             assert results["test-model"] == "VERIFIED"
             
-            with mock.patch("backend.app.security.integrity.verify_installed", return_value={"test-model": "VERIFIED"}):
+            with mock.patch("app.security.integrity.verify_installed", return_value={"test-model": "VERIFIED"}):
                 annotated = annotate(registry, checked=True)
                 assert annotated[0].integrity_verified is True
 
@@ -92,11 +92,11 @@ def test_integrity_mismatch():
         )
         registry = ModelRegistry(entries=[entry], defaults={})
         
-        with mock.patch("backend.app.security.integrity.allowlist_path", return_value=allowlist_path):
+        with mock.patch("app.security.integrity.allowlist_path", return_value=allowlist_path):
             results = verify_installed(registry, ollama_home=ollama_home)
             assert results["test-model"] == "MISMATCH"
             
-            with mock.patch("backend.app.security.integrity.verify_installed", return_value={"test-model": "MISMATCH"}):
+            with mock.patch("app.security.integrity.verify_installed", return_value={"test-model": "MISMATCH"}):
                 annotated = annotate(registry, checked=True)
                 assert annotated[0].integrity_verified is False
 
@@ -128,11 +128,11 @@ def test_integrity_unavailable_no_manifest():
         )
         registry = ModelRegistry(entries=[entry], defaults={})
         
-        with mock.patch("backend.app.security.integrity.allowlist_path", return_value=allowlist_path):
+        with mock.patch("app.security.integrity.allowlist_path", return_value=allowlist_path):
             results = verify_installed(registry, ollama_home=ollama_home)
             assert results["test-model"] == "UNAVAILABLE"
             
-            with mock.patch("backend.app.security.integrity.verify_installed", return_value={"test-model": "UNAVAILABLE"}):
+            with mock.patch("app.security.integrity.verify_installed", return_value={"test-model": "UNAVAILABLE"}):
                 annotated = annotate(registry, checked=True)
                 assert annotated[0].integrity_verified is None
 
@@ -189,7 +189,7 @@ def test_integrity_multiple():
         e3 = ModelEntry(id="m3", model="m3:latest", expected_manifest_digest="sha256:expected_m3_digest")
         registry = ModelRegistry(entries=[e1, e2, e3], defaults={})
         
-        with mock.patch("backend.app.security.integrity.allowlist_path", return_value=allowlist_path):
+        with mock.patch("app.security.integrity.allowlist_path", return_value=allowlist_path):
             results = verify_installed(registry, ollama_home=ollama_home)
             assert results["m1"] == "VERIFIED"
             assert results["m2"] == "MISMATCH"

@@ -4,9 +4,9 @@ from pathlib import Path
 import pytest
 from pptx import Presentation
 
-from backend.app.contracts import DocgenArgs, ErrorCode
-from backend.app.tools.base import ToolContext, ToolError
-from backend.app.tools.docgen import docgen
+from app.contracts import DocgenArgs, ErrorCode
+from app.tools.base import ToolContext, ToolError
+from app.tools.docgen import docgen
 
 def _hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()

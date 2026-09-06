@@ -47,19 +47,31 @@ def write_file(args: WriteFileArgs, ctx: ToolContext) -> dict:
     NOTE for the orchestrator: this tool is marked `requires_approval=True` in
     the registry.  The human sees the ACTUAL content before it is committed -
     approving a filename alone is not Layer 4.
+
+    A write creates a new target only. Existing files are rejected rather than
+    replaced, including when they appear concurrently during this operation.
     """
     try:
         target = ctx.resolve(args.path)
     except PathEscape as exc:
         raise ToolError(ErrorCode.PATH_ESCAPE, str(exc), requested=args.path) from exc
-    existed = target.exists()
     target.parent.mkdir(parents=True, exist_ok=True)
     data = args.content.encode("utf-8")
-    target.write_bytes(data)
+    try:
+        # Exclusive creation is atomic: another process cannot slip an existing
+        # file in between a pre-write check and the write itself.
+        with target.open("xb") as handle:
+            handle.write(data)
+    except FileExistsError as exc:
+        raise ToolError(
+            ErrorCode.TOOL_FAILED,
+            "refusing to overwrite existing file: " + args.path,
+            path=args.path,
+        ) from exc
     result = WriteResult(
         path=to_rel(target, ctx.workspace),
         bytes_written=len(data),
-        created=not existed,
+        created=True,
         sha256="sha256:" + hashlib.sha256(data).hexdigest(),
     )
     ctx.register_artifact(target, media_type_for(target), simulated=False)

@@ -52,18 +52,21 @@ def verify_pptx():
     print("PPTX checks passed.")
 
 def verify_pdf():
-    # Inspection report
+    # Inspection report: true scan (must contain image raster layer, 0 native text to force OCR)
     with open('data/demo_assets/scanned_inspection_report.pdf', 'rb') as f:
         reader = PyPDF2.PdfReader(f)
-        text = reader.pages[0].extract_text()
-        assert "MANGALORE REFINERY" in text
-        assert "FINDING 1" in text
+        assert len(reader.pages) >= 1
+        page = reader.pages[0]
+        assert len(page.images) > 0, "Scanned inspection report must contain raster image scan layer"
+        text = page.extract_text()
+        assert len(text.strip()) == 0, "Scanned inspection report should not have selectable native text (forcing OCR cascade)"
     
-    # Injected PDF
+    # Injected PDF: 7+ pages with injection payload specifically on page 7 (index 6)
     with open('data/demo_assets/injected.pdf', 'rb') as f:
         reader = PyPDF2.PdfReader(f)
-        text = reader.pages[0].extract_text()
-        assert "SYSTEM COMMAND" in text
+        assert len(reader.pages) >= 7, f"Injected PDF must have at least 7 pages, got {len(reader.pages)}"
+        text_p7 = reader.pages[6].extract_text()
+        assert "SYSTEM COMMAND" in text_p7 or "Ignore prior instructions" in text_p7, "Injection payload not found on page 7"
     print("PDF checks passed.")
 
 def verify_png():
